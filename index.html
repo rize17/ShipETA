@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v1.4</title>
+<title>Ship ETA v1.5</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -271,7 +271,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v1.4</span></h1>
+  <h1>Ship ETA<span class="version">v1.5</span></h1>
   <button id="tzBtn" type="button" title="Switch between local time and UTC">
     <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
   </button>
@@ -1036,7 +1036,8 @@ function labelled(layer, text, dim, dir) {
   dir = dir || "right";
   return layer.bindTooltip(text, {
     permanent: true, direction: dir,
-    offset: dir === "left" ? [-12, 0] : dir === "top" ? [0, -10] : [12, 0],
+    offset: dir === "left" ? [-12, 0] : dir === "top" ? [0, -11]
+          : dir === "bottom" ? [0, 11] : [12, 0],
     className: "lbl" + (dim ? " dim" : "")
   });
 }
@@ -1077,19 +1078,21 @@ function drawMap(fit) {
     labelled(L.marker([model.reported.lat, model.reported.lon], {
       icon: L.divIcon({ className: "", html: '<i class="pin pin-old"></i>', iconSize: [10, 10] }),
       interactive: false
-    }), "reported " + fmtRun(model.age / 60) + " ago", true).addTo(overlay);
+    }), "reported " + fmtRun(model.age / 60) + " ago", true, "left").addTo(overlay);
   }
 
   // Ring crossings.
-  // Rings sit close together on a long run in, so their labels take turns.
+  /* The rings are a thumbnail next to a 400 nm track, so these labels carry
+     the clock time only — the day is on the Calculate tab and in the summary
+     below — and they stack above and below to stay off each other. */
   let crossing = 0;
   model.legs.forEach(l => {
     if (!l.ring || l.inside || !l.at) return;
     labelled(L.marker([l.at.lat, l.at.lon], {
       icon: L.divIcon({ className: "", html: '<i class="pin pin-cross"></i>', iconSize: [11, 11] }),
       interactive: false
-    }), l.ring + " nm · " + (l.hours == null ? "—" : fmtClock(at(l.hours), true)),
-       false, crossing++ % 2 ? "left" : "top").addTo(overlay);
+    }), l.ring + " nm · " + (l.hours == null ? "—" : fmtClock(at(l.hours), false)),
+       false, crossing++ % 2 ? "bottom" : "top").addTo(overlay);
   });
 
   // Destination, and the airfield when it's somewhere else.
@@ -1117,7 +1120,6 @@ function drawMap(fit) {
       iconSize: [30, 30], iconAnchor: [15, 15]
     })
   }).addTo(overlay);
-  labelled(shipMarker, model.dist.toFixed(1) + " nm to run");
   shipMarker.on("dragend", e => {
     const ll = e.target.getLatLng();
     setShipFromMap(ll.lat, ll.lng);
@@ -1133,7 +1135,8 @@ function fitMap() {
   const widest = model.legs.reduce((m, l) => Math.max(m, l.ring), 0);
   if (widest) b.extend(L.latLng(model.dest.lat, model.dest.lon).toBounds(widest * 2 * 1852));
   if (model.asset) b.extend([model.asset.base.lat, model.asset.base.lon]);
-  map.fitBounds(b, { padding: [34, 34] });
+  // Room on the right for the destination's label, rather than clipping it.
+  map.fitBounds(b, { paddingTopLeft: [40, 40], paddingBottomRight: [118, 40] });
 }
 
 function renderMapSummary() {
