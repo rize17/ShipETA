@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v1.3</title>
+<title>Ship ETA v1.4</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ship ETA">
+<link rel="stylesheet" href="vendor/leaflet.css">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 
@@ -203,13 +204,74 @@
   .dest .acts button.del { border-color: rgba(232,106,94,0.35); color: var(--err); }
   .empty { font-size: 0.8rem; color: var(--ink-dim); text-align: center; padding: 18px 0; }
 
+  /* ---------- map ---------- */
+  #mapWrap {
+    height: calc(100vh - 280px); min-height: 300px;
+    border-radius: 12px; overflow: hidden; border: 1px solid var(--panel-edge);
+  }
+  #map { width: 100%; height: 100%; background: #08131c; }
+  .leaflet-container { background: #08131c; font-family: inherit; }
+  /* Take the glare off a daylight street map sitting in a dark app. */
+  .leaflet-tile { filter: brightness(0.78) saturate(0.8) contrast(1.05); }
+  .leaflet-bar a, .leaflet-control-attribution {
+    background: #0d1f2d; color: var(--ink-dim); border-color: var(--panel-edge);
+  }
+  .leaflet-bar a:hover { background: #16324a; color: var(--ink); }
+  .leaflet-control-attribution a { color: var(--aqua-deep); }
+
+  .map-head { display: flex; gap: 8px; margin-bottom: 10px; }
+  .map-head button {
+    flex: 1; padding: 9px 6px; border-radius: 9px; cursor: pointer;
+    background: #081420; border: 1px solid var(--panel-edge); color: var(--ink-dim);
+    font-size: 0.74rem; font-weight: 600; letter-spacing: 0.04em;
+  }
+  .map-head button.on { background: var(--amber); border-color: var(--amber); color: #1a1204; }
+
+  /* Markers are divs so they can be styled with the rest of the app. */
+  .pin { display: block; border-radius: 50%; box-sizing: border-box; }
+  .pin-dest { width: 16px; height: 16px; background: var(--aqua); border: 2px solid #04121a; }
+  .pin-base { width: 14px; height: 14px; background: var(--ok); border: 2px solid #04121a; }
+  .pin-old  { width: 10px; height: 10px; background: none; border: 2px dashed var(--ink-dim); }
+  .pin-cross { width: 11px; height: 11px; background: #04121a; border: 2px solid var(--aqua); }
+  .pin-ship-wrap {
+    width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+    cursor: grab; touch-action: none;
+  }
+  .pin-ship-wrap:active { cursor: grabbing; }
+  .pin-ship {
+    width: 0; height: 0; border-radius: 0;
+    border-left: 13px solid var(--amber);
+    border-top: 8px solid transparent; border-bottom: 8px solid transparent;
+    filter: drop-shadow(0 0 3px rgba(0,0,0,0.95));
+  }
+  .leaflet-tooltip.lbl {
+    background: rgba(8,20,32,0.86); border: 1px solid var(--panel-edge);
+    color: var(--ink); font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 0.04em; padding: 2px 6px; box-shadow: none;
+  }
+  .leaflet-tooltip.lbl::before { display: none; }
+  .leaflet-tooltip.lbl.dim { color: var(--ink-dim); }
+
+  #mapSummary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+  #mapSummary .cell { background: #081420; border: 1px solid var(--panel-edge);
+    border-radius: 10px; padding: 9px 10px; min-width: 0; }
+  #mapSummary .cell .k {
+    font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim);
+  }
+  #mapSummary .cell .v {
+    margin-top: 3px; font-size: 0.95rem; font-weight: 650;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  #mapSummary .cell .v.aqua { color: var(--aqua); }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v1.3</span></h1>
+  <h1>Ship ETA<span class="version">v1.4</span></h1>
   <button id="tzBtn" type="button" title="Switch between local time and UTC">
     <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
   </button>
@@ -217,6 +279,7 @@
 
 <nav class="view-tabs" id="pageTabs">
   <button class="view-tab active" type="button" data-page="calc">Calculate</button>
+  <button class="view-tab" type="button" data-page="map">Map</button>
   <button class="view-tab" type="button" data-page="dest">Destinations</button>
 </nav>
 
@@ -291,6 +354,22 @@
   </details>
 </main>
 
+<!-- ======================= MAP ======================= -->
+<main id="pageMap" style="display:none">
+  <section class="panel">
+    <div class="map-head">
+      <button id="placeBtn" type="button">Tap map to place ship</button>
+      <button id="fitBtn" type="button">Fit everything</button>
+    </div>
+    <div id="mapWrap"><div id="map"></div></div>
+    <div class="hint" id="mapNote">Drag the ship to move her, or arm the button above and
+      tap where she is. Either way the position is taken as where she is right now.</div>
+  </section>
+  <section class="panel">
+    <div id="mapSummary"></div>
+  </section>
+</main>
+
 <!-- ======================= DESTINATIONS ======================= -->
 <main id="pageDest" style="display:none">
   <section class="panel">
@@ -318,6 +397,7 @@
   </section>
 </main>
 
+<script src="vendor/leaflet.js"></script>
 <script>
 "use strict";
 
@@ -671,6 +751,7 @@ function render() {
   renderResults();
   renderAsset();
   drawTrack();
+  drawMap(false);
 }
 
 function renderResults() {
@@ -888,6 +969,196 @@ function drawTrack() {
 
 }
 
+/* ================= map ================= */
+/* Leaflet is served from vendor/ rather than a CDN, so a blocked or slow CDN
+   can't take the app down. The tiles do come off the network: without them the
+   basemap is blank and everything else — rings, track, positions — still draws
+   and is still exact. */
+let map = null, overlay = null, shipMarker = null, placing = false, tilesFailed = false;
+
+function ensureMap() {
+  if (map) return;
+  map = L.map("map", { zoomControl: true, attributionControl: true })
+         .setView([-33.9, 18.4], 6);
+  const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18, minZoom: 2,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  });
+  tiles.on("tileerror", () => {
+    if (tilesFailed) return;
+    tilesFailed = true;
+    noteMap("No map tiles — you're offline, or they're blocked. Everything drawn on " +
+            "top is still exact; only the background is missing.", "warn");
+  });
+  tiles.on("tileload", () => {
+    if (!tilesFailed) return;
+    tilesFailed = false;
+    noteMap();
+  });
+  tiles.addTo(map);
+  overlay = L.layerGroup().addTo(map);
+
+  map.on("click", e => {
+    if (!placing) return;
+    setShipFromMap(e.latlng.lat, e.latlng.lng);
+    armPlacing(false);
+  });
+}
+
+function noteMap(text, kind) {
+  const el = $("mapNote");
+  el.className = "hint" + (kind ? " " + kind : "");
+  el.textContent = text || (placing
+    ? "Tap the map where she is."
+    : "Drag the ship to move her, or arm the button above and tap where she is. " +
+      "Either way the position is taken as where she is right now.");
+}
+
+function armPlacing(on) {
+  placing = on;
+  $("placeBtn").classList.toggle("on", on);
+  $("placeBtn").textContent = on ? "Tap the map…" : "Tap map to place ship";
+  if (map) L.DomUtil[on ? "addClass" : "removeClass"](map.getContainer(), "leaflet-crosshair");
+  if (map) map.getContainer().style.cursor = on ? "crosshair" : "";
+  noteMap();
+}
+
+/* Putting her somewhere on the map means that's where she is now, so the
+   position age goes back to zero rather than being applied a second time. */
+function setShipFromMap(lat, lon) {
+  $("inPos").value = fmtDDM({ lat, lon });
+  $("inAge").value = "";
+  saveInputs();
+  render();
+}
+
+function labelled(layer, text, dim, dir) {
+  dir = dir || "right";
+  return layer.bindTooltip(text, {
+    permanent: true, direction: dir,
+    offset: dir === "left" ? [-12, 0] : dir === "top" ? [0, -10] : [12, 0],
+    className: "lbl" + (dim ? " dim" : "")
+  });
+}
+
+function drawMap(fit) {
+  if (!map) return;
+  map.invalidateSize();
+  overlay.clearLayers();
+  shipMarker = null;
+  renderMapSummary();
+  if (!model) return;
+
+  const dest = [model.dest.lat, model.dest.lon];
+  const now = [model.now.lat, model.now.lon];
+
+  // Range rings, as circles on the ground around the destination.
+  model.legs.forEach(l => {
+    if (!l.ring) return;
+    L.circle(dest, {
+      radius: l.ring * 1852, color: "#38c8e8", weight: 1.5,
+      opacity: l.inside ? 0.35 : 0.75, fill: false, dashArray: l.inside ? "4 6" : null
+    }).addTo(overlay);
+  });
+
+  /* Her track in, sampled along the same great circle the ETAs are worked on —
+     a straight line on a Mercator map is not that path. */
+  const pts = [];
+  for (let i = 0; i <= 64; i++) {
+    const p = along(model.now, model.brg, model.dist * i / 64);
+    pts.push([p.lat, p.lon]);
+  }
+  L.polyline(pts, { color: "#e8b638", weight: 2, opacity: 0.85 }).addTo(overlay);
+
+  // Where she was when the position was reported, if it wasn't just now.
+  if (model.moved > 0.05) {
+    L.polyline([[model.reported.lat, model.reported.lon], now],
+      { color: "#6d8ba0", weight: 1.5, opacity: 0.7, dashArray: "3 5" }).addTo(overlay);
+    labelled(L.marker([model.reported.lat, model.reported.lon], {
+      icon: L.divIcon({ className: "", html: '<i class="pin pin-old"></i>', iconSize: [10, 10] }),
+      interactive: false
+    }), "reported " + fmtRun(model.age / 60) + " ago", true).addTo(overlay);
+  }
+
+  // Ring crossings.
+  // Rings sit close together on a long run in, so their labels take turns.
+  let crossing = 0;
+  model.legs.forEach(l => {
+    if (!l.ring || l.inside || !l.at) return;
+    labelled(L.marker([l.at.lat, l.at.lon], {
+      icon: L.divIcon({ className: "", html: '<i class="pin pin-cross"></i>', iconSize: [11, 11] }),
+      interactive: false
+    }), l.ring + " nm · " + (l.hours == null ? "—" : fmtClock(at(l.hours), true)),
+       false, crossing++ % 2 ? "left" : "top").addTo(overlay);
+  });
+
+  // Destination, and the airfield when it's somewhere else.
+  labelled(L.marker(dest, {
+    icon: L.divIcon({ className: "", html: '<i class="pin pin-dest"></i>', iconSize: [16, 16] }),
+    interactive: false
+  }), model.dest.name).addTo(overlay);
+
+  if (model.asset && model.asset.base !== model.dest) {
+    labelled(L.marker([model.asset.base.lat, model.asset.base.lon], {
+      icon: L.divIcon({ className: "", html: '<i class="pin pin-base"></i>', iconSize: [14, 14] }),
+      interactive: false
+    }), model.asset.base.name, true).addTo(overlay);
+  }
+
+  // The ship herself — draggable, which is the quickest way to correct her.
+  /* The hull points down her track, and the 30px box around it is what your
+     finger actually has to hit. */
+  shipMarker = L.marker(now, {
+    draggable: true, autoPan: true,
+    icon: L.divIcon({
+      className: "",
+      html: '<span class="pin-ship-wrap" style="transform:rotate(' +
+            (model.brg - 90).toFixed(1) + 'deg)"><i class="pin pin-ship"></i></span>',
+      iconSize: [30, 30], iconAnchor: [15, 15]
+    })
+  }).addTo(overlay);
+  labelled(shipMarker, model.dist.toFixed(1) + " nm to run");
+  shipMarker.on("dragend", e => {
+    const ll = e.target.getLatLng();
+    setShipFromMap(ll.lat, ll.lng);
+  });
+
+  if (fit) fitMap();
+}
+
+function fitMap() {
+  if (!map || !model) return;
+  const b = L.latLngBounds([[model.now.lat, model.now.lon],
+                            [model.dest.lat, model.dest.lon]]);
+  const widest = model.legs.reduce((m, l) => Math.max(m, l.ring), 0);
+  if (widest) b.extend(L.latLng(model.dest.lat, model.dest.lon).toBounds(widest * 2 * 1852));
+  if (model.asset) b.extend([model.asset.base.lat, model.asset.base.lon]);
+  map.fitBounds(b, { padding: [34, 34] });
+}
+
+function renderMapSummary() {
+  const box = $("mapSummary");
+  if (!model) {
+    box.innerHTML = '<div class="cell" style="grid-column:1/-1">' +
+      '<div class="k">Nothing plotted</div>' +
+      '<div class="v" style="font-size:0.8rem;font-weight:500">' +
+      "Enter the ship's position, or tap the map</div></div>";
+    return;
+  }
+  const cells = [["To run", model.dist.toFixed(1) + " nm", true],
+                 ["Bearing", pad3(model.brg) + "\u00B0", false]];
+  const main = model.legs[model.legs.length - 1];
+  cells.push(["Alongside", main.hours == null ? "—" : fmtClock(at(main.hours), true), true]);
+  model.legs.forEach(l => {
+    if (!l.ring) return;
+    cells.push([l.ring + " nm ring",
+      l.inside ? "inside" : (l.hours == null ? "—" : fmtClock(at(l.hours), true)), true]);
+  });
+  box.innerHTML = cells.map(([k, v, a]) =>
+    '<div class="cell"><div class="k">' + esc(k) + '</div><div class="v' +
+    (a ? " aqua" : "") + '">' + esc(v) + "</div></div>").join("");
+}
+
 /* ---------- the brief, as text you can paste into a message ---------- */
 function briefText() {
   if (!model) return "";
@@ -1014,10 +1285,17 @@ $("pageTabs").addEventListener("click", e => {
   const b = e.target.closest(".view-tab");
   if (!b) return;
   document.querySelectorAll(".view-tab").forEach(t => t.classList.toggle("active", t === b));
-  const calc = b.dataset.page === "calc";
-  $("pageCalc").style.display = calc ? "" : "none";
-  $("pageDest").style.display = calc ? "none" : "";
-  if (calc) render();
+  const page = b.dataset.page;
+  $("pageCalc").style.display = page === "calc" ? "" : "none";
+  $("pageMap").style.display = page === "map" ? "" : "none";
+  $("pageDest").style.display = page === "dest" ? "" : "none";
+  if (page === "calc") render();
+  if (page === "map") {
+    ensureMap();
+    compute();
+    // The container had no size until now, so Leaflet has to be told.
+    setTimeout(() => drawMap(true), 0);
+  }
 });
 
 ["inPos", "inSpeed", "inAge", "inRings", "inAsset"].forEach(id =>
@@ -1042,6 +1320,9 @@ $("results").addEventListener("click", e => {
   const b = e.target.closest("[data-copy]");
   if (b) copyText(b.dataset.copy, b, "Copied");
 });
+
+$("placeBtn").addEventListener("click", () => armPlacing(!placing));
+$("fitBtn").addEventListener("click", fitMap);
 
 $("dSave").addEventListener("click", saveDest);
 $("dCancel").addEventListener("click", resetForm);

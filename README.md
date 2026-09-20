@@ -32,6 +32,19 @@ them against your own chart and correct them here.
 Nothing is sent anywhere. The destinations and the last job you typed live in
 the browser, and once it's loaded the page works with no signal at all.
 
+## The map
+
+The **Map** tab plots the whole picture: the port, your range rings as circles
+on the ground, her track in, where she crosses each ring, and the ship herself.
+
+You can set her position from it rather than typing anything — **drag the ship**
+to where she is, or press **Tap map to place ship** and tap the spot. Either way
+it's taken as where she is *now*, so the position age is cleared.
+
+The tiles come from OpenStreetMap and are the one thing the app fetches from the
+network. With no signal you lose the coastline and nothing else: the rings,
+track and positions still draw, and every figure is still exact.
+
 ## What it assumes
 
 Distances are great-circle in nautical miles. Every ETA assumes she holds the
@@ -48,10 +61,12 @@ index.html            the whole app — UI, maths and storage in one file
 sw.js                 service worker, so it works offline
 manifest.webmanifest  home-screen install metadata
 icon-192.png icon-512.png
+vendor/               Leaflet, committed rather than loaded from a CDN
 ```
 
-No build step, no package manager, no dependencies — open `index.html` and
-it runs.
+No build step and no package manager — open `index.html` and it runs. Leaflet
+is the only library, and it's in the repo, so nothing has to be fetched for the
+app to start.
 
 ## Deploying
 
@@ -66,5 +81,5 @@ Bump the version on every functional change, in all four places at once: the
 `<title>`, the `.version` span, `CACHE` in `sw.js`, and *Current* below. It's
 the only way to confirm a deploy actually landed.
 
-Current: **v1.3**. (v1.0 to v1.2 were built before the app moved to its own
+Current: **v1.4**. (v1.0 to v1.2 were built before the app moved to its own
 repository.)
