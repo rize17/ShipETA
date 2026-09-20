@@ -55,14 +55,12 @@ it runs.
 
 ## Deploying
 
-Push to `main`. `.github/workflows/pages.yml` publishes the repository root to
-Pages automatically. Hard-refresh to beat the cache; `?v=<version>` on the URL
-forces it.
+Push to `main` — that's all. Pages is set to **Deploy from a branch** (`main`,
+root), so GitHub publishes the repository root itself. There's no workflow and
+no build step; `.nojekyll` keeps the files from being run through Jekyll on the
+way out.
 
-One-time setup, if the deploy fails with *Create Pages site failed*: go to
-**Settings → Pages → Build and deployment** and set **Source** to **GitHub
-Actions**. The workflow token isn't permitted to create the Pages site itself,
-only to publish to one that exists. Re-run the workflow afterwards.
+Hard-refresh to beat the cache; `?v=<version>` on the URL forces it.
 
 Bump the version on every functional change, in all four places at once: the
 `<title>`, the `.version` span, `CACHE` in `sw.js`, and *Current* below. It's

@@ -60,5 +60,7 @@ may still be behind it.
 
 ## Deploying
 
-Push to `main`; `.github/workflows/pages.yml` publishes the repository root to
-Pages at <https://rize17.github.io/ShipETA/>. Hard-refresh to beat the cache.
+Push to `main`. Pages serves the repository root straight from the branch —
+no workflow, no build step — at <https://rize17.github.io/ShipETA/>. Keep
+`.nojekyll`: without it GitHub runs the files through Jekyll, which is a
+needless risk for a hand-written page. Hard-refresh to beat the cache.
