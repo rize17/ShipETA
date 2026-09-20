@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v1.6</title>
+<title>Ship ETA v1.7</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -257,7 +257,12 @@
     background: rgba(8,20,32,0.86); border: 1px solid var(--panel-edge);
     color: var(--ink); font-size: 0.68rem; font-weight: 600;
     letter-spacing: 0.04em; padding: 2px 6px; box-shadow: none;
+    /* Absolutely positioned boxes shrink-wrap to their longest word, so the
+       width has to be asked for explicitly before max-width means anything. */
+    white-space: normal; width: max-content; max-width: 170px;
+    line-height: 1.3; text-align: center;
   }
+  .leaflet-tooltip.lbl.p1 { border-color: var(--aqua-deep); }
   .leaflet-tooltip.lbl::before { display: none; }
   .leaflet-tooltip.lbl.dim { color: var(--ink-dim); }
 
@@ -280,7 +285,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v1.6</span></h1>
+  <h1>Ship ETA<span class="version">v1.7</span></h1>
   <button id="tzBtn" type="button" title="Switch between local time and UTC">
     <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
   </button>
@@ -1133,14 +1138,26 @@ function resetTrack() {
   $("resetTrackBtn").style.display = "none";
 }
 
+let labelRefs = [];
+const offsetFor = dir => dir === "left" ? [-12, 0] : dir === "top" ? [0, -11]
+                       : dir === "bottom" ? [0, 11] : [12, 0];
+
 function labelled(layer, text, dim, dir, prio) {
   dir = dir || "right";
-  return layer.bindTooltip(text, {
-    permanent: true, direction: dir,
-    offset: dir === "left" ? [-12, 0] : dir === "top" ? [0, -11]
-          : dir === "bottom" ? [0, 11] : [12, 0],
+  layer.bindTooltip(text, {
+    permanent: true, direction: dir, offset: offsetFor(dir),
     className: "lbl p" + (prio || 5) + (dim ? " dim" : "")
   });
+  labelRefs.push({ layer, prio: prio || 5, dir });
+  return layer;
+}
+
+function faceLabel(ref, dir) {
+  const tt = ref.layer.getTooltip();
+  if (!tt) return;
+  tt.options.direction = dir;
+  tt.options.offset = offsetFor(dir);
+  tt.update();
 }
 
 /* Zoomed out far enough, every label lands on its neighbour or falls off the
@@ -1148,23 +1165,31 @@ function labelled(layer, text, dim, dir, prio) {
    won't fit — the figures are all in the strip below the map anyway. */
 function declutter() {
   if (!map) return;
-  const pane = map.getPane("tooltipPane");
-  if (!pane) return;
   const box = map.getContainer().getBoundingClientRect();
-  const els = Array.from(pane.querySelectorAll(".leaflet-tooltip"));
-  els.forEach(el => { el.style.visibility = ""; });
-  els.sort((a, b) => {
-    const p = el => { const m = /\bp(\d)\b/.exec(el.className); return m ? +m[1] : 9; };
-    return p(a) - p(b);
-  });
+  const refs = labelRefs
+    .filter(r => r.layer.getTooltip() && r.layer.getTooltip().getElement())
+    .sort((a, b) => a.prio - b.prio);
+  refs.forEach(r => { r.layer.getTooltip().getElement().style.visibility = ""; });
+
   const kept = [];
-  els.forEach(el => {
-    const r = el.getBoundingClientRect();
-    const offEdge = r.left < box.left || r.right > box.right ||
-                    r.top < box.top || r.bottom > box.bottom;
-    const clash = kept.some(k => r.left < k.right && r.right > k.left &&
-                                 r.top < k.bottom && r.bottom > k.top);
-    if (offEdge || clash) el.style.visibility = "hidden"; else kept.push(r);
+  const measure = r => r.layer.getTooltip().getElement().getBoundingClientRect();
+  const fits = q =>
+    q.left >= box.left && q.right <= box.right && q.top >= box.top && q.bottom <= box.bottom &&
+    !kept.some(k => q.left < k.right && q.right > k.left && q.top < k.bottom && q.bottom > k.top);
+
+  refs.forEach(r => {
+    let q = measure(r);
+    if (!fits(q)) {
+      // Try the other side of the marker before dropping it.
+      const alt = { right: "left", left: "right", top: "bottom", bottom: "top" }[r.dir] || "left";
+      faceLabel(r, alt);
+      q = measure(r);
+      if (!fits(q)) { faceLabel(r, r.dir); q = measure(r); }
+    }
+    /* The destination is never dropped: overlapping it slightly beats losing
+       how far off and how long it is. */
+    if (fits(q) || r.prio === 1) kept.push(q);
+    else r.layer.getTooltip().getElement().style.visibility = "hidden";
   });
 }
 
@@ -1172,6 +1197,7 @@ function drawMap(fit) {
   if (!map) return;
   map.invalidateSize();
   overlay.clearLayers();
+  labelRefs = [];
   renderMapSummary();
   if (!model) return;
 
@@ -1200,22 +1226,23 @@ function drawMap(fit) {
   if (model.transiting) {
     L.polyline([[model.cpa.at.lat, model.cpa.at.lon], [model.dest.lat, model.dest.lon]],
       { color: "#6d8ba0", weight: 1, opacity: 0.6, dashArray: "2 5" }).addTo(overlay);
-    labelled(L.marker([model.cpa.at.lat, model.cpa.at.lon], {
+    L.marker([model.cpa.at.lat, model.cpa.at.lon], {
       icon: L.divIcon({ className: "", html: '<i class="pin pin-cross"></i>', iconSize: [11, 11] }),
       interactive: false
-    }), "closest " + model.cpa.nm.toFixed(0) + " nm \u00B7 " +
-        (model.cpa.hours == null ? "\u2014" : fmtClock(at(model.cpa.hours), true)),
-       true, "bottom", 3).addTo(overlay);
+    }).addTo(overlay).bindTooltip("closest " + model.cpa.nm.toFixed(1) + " nm \u00B7 " +
+      (model.cpa.hours == null ? "\u2014" : fmtClock(at(model.cpa.hours), true)),
+      { direction: "top", className: "lbl dim" });
   }
 
   // Where she was when the position was reported, if it wasn't just now.
   if (model.moved > 0.05) {
     L.polyline([[model.reported.lat, model.reported.lon], now],
       { color: "#6d8ba0", weight: 1.5, opacity: 0.7, dashArray: "3 5" }).addTo(overlay);
-    labelled(L.marker([model.reported.lat, model.reported.lon], {
+    L.marker([model.reported.lat, model.reported.lon], {
       icon: L.divIcon({ className: "", html: '<i class="pin pin-old"></i>', iconSize: [10, 10] }),
       interactive: false
-    }), "reported " + fmtRun(model.age / 60) + " ago", true, "left", 5).addTo(overlay);
+    }).addTo(overlay).bindTooltip("reported " + fmtRun(model.age / 60) + " ago",
+      { direction: "left", className: "lbl dim" });
   }
 
   // Ring crossings.
@@ -1234,13 +1261,15 @@ function drawMap(fit) {
   });
 
   // Destination, and the airfield when it's somewhere else.
-  const destLabel = model.dest.name + " \u00B7 " + model.dist.toFixed(0) + " nm" +
+  const destLabel = model.dest.name + "<br>" + model.dist.toFixed(1) + " nm" +
     (model.arrival && model.arrival.hours != null
-      ? " \u00B7 " + fmtClock(at(model.arrival.hours), true) : "");
+      ? " \u00B7 " + fmtClock(at(model.arrival.hours), true)
+      : model.cpa.hours == null ? ""
+      : "<br>closest " + model.cpa.nm.toFixed(1) + " nm " + fmtClock(at(model.cpa.hours), true));
   labelled(L.marker(dest, {
     icon: L.divIcon({ className: "", html: '<i class="pin pin-dest"></i>', iconSize: [16, 16] }),
     interactive: false
-  }), destLabel, false, "right", 1).addTo(overlay);
+  }), destLabel, false, "bottom", 1).addTo(overlay);
 
   if (model.asset && model.asset.base !== model.dest) {
     labelled(L.marker([model.asset.base.lat, model.asset.base.lon], {
@@ -1289,7 +1318,7 @@ function fitMap() {
   if (model.asset) b.extend([model.asset.base.lat, model.asset.base.lon]);
   if (model.transiting) b.extend([model.target.lat, model.target.lon]);
   // Room on the right for the destination's label, rather than clipping it.
-  map.fitBounds(b, { paddingTopLeft: [40, 40], paddingBottomRight: [118, 40] });
+  map.fitBounds(b, { paddingTopLeft: [70, 44], paddingBottomRight: [90, 50] });
 }
 
 function renderMapSummary() {
@@ -1306,7 +1335,8 @@ function renderMapSummary() {
   cells.push(model.arrival
     ? ["Alongside", model.arrival.hours == null ? "\u2014"
         : fmtClock(at(model.arrival.hours), true), true]
-    : ["Closest", model.cpa.nm.toFixed(1) + " nm", true]);
+    : ["Closest", model.cpa.nm.toFixed(1) + " nm \u00B7 " +
+        (model.cpa.hours == null ? "\u2014" : fmtClock(at(model.cpa.hours), true)), true]);
   model.legs.forEach(l => {
     cells.push([l.ring + " nm ring",
       l.misses ? "never" : l.insideNow ? "inside"
