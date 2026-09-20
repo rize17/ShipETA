@@ -35,9 +35,13 @@ package manager.
   no symbols, either order. It's typed by hand off a screen under time
   pressure — every format it rejects is a format someone has to retype.
   Anything it can't read says so plainly rather than guessing.
-- **Echo back what was parsed.** The position is always shown again in
-  degrees and decimal minutes under the input. A transposed digit is the most
-  likely error in the whole app, and that line is what catches it.
+- **Echo back what was parsed, in every format.** Under the input the position
+  is shown again as degrees and decimal minutes, degrees minutes seconds, and
+  decimal degrees, each tagged. A transposed digit is the likeliest error in
+  the whole app and that block is what catches it; it also means you can read
+  back whichever form the person on the radio is using without converting
+  anything by hand. The hemisphere letter carries the sign, so the number
+  never does as well — no `-34.9705° S`.
 - **The ship is met on a range ring, nowhere else.** Rings default to 100 and
   80 nm — the outer limit and the range normally flown. Don't reintroduce a
   "meet her wherever the arithmetic lands" figure; it offers something that

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v1.7</title>
+<title>Ship ETA v1.8</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -108,6 +108,12 @@
   .grid2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; }
   .hint { font-size: 0.7rem; color: var(--ink-dim); margin-top: 5px; line-height: 1.45; }
   .hint.good { color: var(--aqua); }
+  .fmt-row { display: flex; gap: 9px; align-items: baseline; margin-top: 2px; }
+  .fmt-row .fmt-tag {
+    color: var(--ink-dim); font-size: 0.58rem; letter-spacing: 0.12em;
+    min-width: 2.4em; flex-shrink: 0;
+  }
+  .fmt-row .mono { font-size: 0.72rem; }
   .hint.warn { color: var(--amber); }
   .hint.bad { color: var(--err); }
 
@@ -285,7 +291,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v1.7</span></h1>
+  <h1>Ship ETA<span class="version">v1.8</span></h1>
   <button id="tzBtn" type="button" title="Switch between local time and UTC">
     <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
   </button>
@@ -557,8 +563,35 @@ function fmtDDM(pos) {
   };
   return one(pos.lat, "N", "S", 2) + " " + one(pos.lon, "E", "W", 3);
 }
-const fmtDD = pos => pos.lat.toFixed(4) + "° " + (pos.lat < 0 ? "S" : "N") + ", " +
-                     pos.lon.toFixed(4) + "° " + (pos.lon < 0 ? "W" : "E");
+/* Degrees, minutes and seconds — what a chart and most aircrew want spoken. */
+function fmtDMS(pos) {
+  const one = (v, pos_, neg, width) => {
+    const h = v < 0 ? neg : pos_;
+    v = Math.abs(v);
+    let d = Math.floor(v);
+    let m = Math.floor((v - d) * 60);
+    let s = ((v - d) * 60 - m) * 60;
+    if (s >= 59.95) { s = 0; m += 1; }     // don't print 58\u203260.0\u2033
+    if (m >= 60) { m = 0; d += 1; }
+    return String(d).padStart(width, "0") + "\u00B0" +
+           String(m).padStart(2, "0") + "\u2032" +
+           s.toFixed(1).padStart(4, "0") + "\u2033" + h;
+  };
+  return one(pos.lat, "N", "S", 2) + " " + one(pos.lon, "E", "W", 3);
+}
+
+/* The hemisphere letter carries the sign, so the number mustn't as well. */
+const fmtDD = pos => Math.abs(pos.lat).toFixed(4) + "\u00B0" + (pos.lat < 0 ? "S" : "N") + " " +
+                     Math.abs(pos.lon).toFixed(4) + "\u00B0" + (pos.lon < 0 ? "W" : "E");
+
+/* Every way of writing it at once: you read back whichever one the person on
+   the other end of the radio is using. */
+function fmtAll(pos) {
+  const row = (tag, val) =>
+    '<div class="fmt-row"><span class="fmt-tag">' + tag + '</span>' +
+    '<span class="mono">' + val + "</span></div>";
+  return row("DDM", fmtDDM(pos)) + row("DMS", fmtDMS(pos)) + row("DD", fmtDD(pos));
+}
 
 /* ================= time ================= */
 let useUTC = store.get("shipeta.utc", false);
@@ -830,7 +863,7 @@ function renderResults() {
     $("inPos").classList.add("bad");
   } else {
     posEcho.className = "hint good";
-    posEcho.innerHTML = '<span class="mono">' + fmtDDM(ship) + "</span> · " + fmtDD(ship);
+    posEcho.innerHTML = fmtAll(ship);
     $("inPos").classList.remove("bad");
   }
 
@@ -1540,7 +1573,7 @@ $("dPos").addEventListener("input", () => {
   const p = parseCoords($("dPos").value);
   const echo = $("dPosEcho");
   if (!$("dPos").value.trim()) { echo.className = "hint"; echo.textContent = ""; $("dPos").classList.remove("bad"); }
-  else if (p) { echo.className = "hint good"; echo.textContent = fmtDDM(p); $("dPos").classList.remove("bad"); }
+  else if (p) { echo.className = "hint good"; echo.innerHTML = fmtAll(p); $("dPos").classList.remove("bad"); }
   else { echo.className = "hint bad"; echo.textContent = "Can't read that yet."; $("dPos").classList.add("bad"); }
 });
 $("destList").addEventListener("click", e => {
