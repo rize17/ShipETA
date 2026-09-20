@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v1.5</title>
+<title>Ship ETA v1.6</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -233,6 +233,15 @@
   .pin-base { width: 14px; height: 14px; background: var(--ok); border: 2px solid #04121a; }
   .pin-old  { width: 10px; height: 10px; background: none; border: 2px dashed var(--ink-dim); }
   .pin-cross { width: 11px; height: 11px; background: #04121a; border: 2px solid var(--aqua); }
+  .pin-handle-wrap {
+    width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+    cursor: grab; touch-action: none;
+  }
+  .pin-handle-wrap:active { cursor: grabbing; }
+  .pin-handle {
+    width: 13px; height: 13px; border-radius: 50%;
+    background: rgba(232,182,56,0.25); border: 2px dashed var(--amber);
+  }
   .pin-ship-wrap {
     width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
     cursor: grab; touch-action: none;
@@ -271,7 +280,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v1.5</span></h1>
+  <h1>Ship ETA<span class="version">v1.6</span></h1>
   <button id="tzBtn" type="button" title="Switch between local time and UTC">
     <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
   </button>
@@ -358,12 +367,13 @@
 <main id="pageMap" style="display:none">
   <section class="panel">
     <div class="map-head">
-      <button id="placeBtn" type="button">Tap map to place ship</button>
+      <button id="resetTrackBtn" type="button" style="display:none">Track back to port</button>
       <button id="fitBtn" type="button">Fit everything</button>
     </div>
     <div id="mapWrap"><div id="map"></div></div>
-    <div class="hint" id="mapNote">Drag the ship to move her, or arm the button above and
-      tap where she is. Either way the position is taken as where she is right now.</div>
+    <div class="hint" id="mapNote">Drag the open end of her track to where she's actually
+      heading, for when she's passing rather than coming in. Her position comes off the
+      Calculate tab, not off this map.</div>
   </section>
   <section class="panel">
     <div id="mapSummary"></div>
@@ -618,12 +628,16 @@ function loadInputs() {
   if (!$("inRings").value) $("inRings").value = "100, 80";
   if (!$("inAsset").value) $("inAsset").value = "110";
   if (saved.assetOpen) $("assetPanel").open = true;
+  if (saved.trackTo && isFinite(saved.trackTo.lat) && isFinite(saved.trackTo.lon)) {
+    trackTo = { lat: saved.trackTo.lat, lon: saved.trackTo.lon };
+  }
 }
 function saveInputs() {
   const out = { assetOpen: $("assetPanel").open };
   FIELDS.forEach(f => out[f] = $(f).value);
   out.dest = $("destSel").value;
   out.base = $("baseSel").value;
+  out.trackTo = trackTo;
   store.set("shipeta.inputs", out);
 }
 
@@ -674,40 +688,75 @@ function compute() {
   if (!dest) { model = null; return; }
   if (!ship) { model = null; return; }
 
+  /* Where she's actually steaming. Straight at the destination unless a track
+     has been set on the map — the case where she's only passing, and we go out
+     to meet her on a ring rather than her coming in. */
+  const transiting = !!trackTo;
+  const target = trackTo || dest;
+
   const reported = { lat: ship.lat, lon: ship.lon };
   const distAtReport = distanceNm(reported, dest);
-  const brgAtReport = bearingDeg(reported, dest);
 
-  // Carry the ship forward from the position report to now.
+  // Carry the ship forward from the position report to now, down her track.
+  const runBrg = bearingDeg(reported, target);
   const run = speed && speed > 0 ? speed * (age / 60) : 0;
   const now = { lat: reported.lat, lon: reported.lon };
   let moved = 0;
   if (run > 0) {
-    moved = Math.min(run, distAtReport);
-    const p = along(reported, brgAtReport, moved);
+    moved = Math.min(run, distanceNm(reported, target));
+    const p = along(reported, runBrg, moved);
     now.lat = p.lat; now.lon = p.lon;
   }
 
-  const dist = distanceNm(now, dest);
+  const dist = distanceNm(now, dest);        // straight line to the port, right now
   const brg = bearingDeg(now, dest);
+  const trackBrg = bearingDeg(now, target);
+  const trackLen = Math.max(distanceNm(now, target), 0.0001);
   const t0 = Date.now();
 
+  /* How far off the port she is, s miles along her track. Heading straight at
+     it that's just dist - s; passing by, it falls to a closest approach and
+     climbs again — which is the curve the rings have to be solved against. */
+  const offPort = s => distanceNm(along(now, trackBrg, s), dest);
+  const hrs = s => speed > 0 ? s / speed : null;
+  const point = s => ({ s, hours: hrs(s), at: along(now, trackBrg, s) });
+
+  // Closest point of approach: the bottom of that curve.
+  let lo = 0, hi = trackLen;
+  for (let i = 0; i < 60; i++) {
+    const a = lo + (hi - lo) / 3, b = hi - (hi - lo) / 3;
+    if (offPort(a) < offPort(b)) hi = b; else lo = a;
+  }
+  const cpa = point((lo + hi) / 2);
+  cpa.nm = offPort(cpa.s);
+
+  // Where her track cuts a ring: on the way in before the closest approach,
+  // on the way out after it.
+  const cut = (r, from, to) => {
+    let a = from, b = to;
+    for (let i = 0; i < 60; i++) {
+      const m = (a + b) / 2;
+      if ((offPort(a) - r) * (offPort(m) - r) <= 0) b = m; else a = m;
+    }
+    return point((a + b) / 2);
+  };
+
+  const endsInside = r => offPort(trackLen) <= r;
   const legs = rings().map(r => {
-    const togo = dist - r;
-    const at = togo > 0 ? along(now, brg, togo) : null;
+    const insideNow = dist <= r;
+    const misses = cpa.nm > r;
     return {
-      name: r + " nm ring",
-      ring: r,
-      togo: Math.max(0, togo),
-      inside: togo <= 0,
-      hours: speed > 0 ? Math.max(0, togo) / speed : null,
-      at
+      ring: r, name: r + " nm ring",
+      insideNow, misses,
+      entry: (misses || insideNow) ? null : cut(r, 0, cpa.s),
+      exit: (misses || endsInside(r)) ? null : cut(r, cpa.s, trackLen),
+      openEnded: !misses && endsInside(r)
     };
   });
-  legs.push({
-    name: dest.name, ring: 0, togo: dist, inside: false,
-    hours: speed > 0 ? dist / speed : null, at: { lat: dest.lat, lon: dest.lon }
-  });
+
+  // She only arrives anywhere if she's actually heading there.
+  const arrival = transiting ? null
+    : { togo: dist, hours: hrs(dist), at: { lat: dest.lat, lon: dest.lon } };
 
   if (speed == null || speed <= 0) notes.push(["warn", "Enter the ship's speed to get times."]);
   else if (speed > 40) notes.push(["warn", speed.toFixed(1) + " kt is fast for a ship — check it."]);
@@ -715,31 +764,33 @@ function compute() {
     "If you meant southern Africa it wants an S."]);
   if (dist > 3000) notes.push(["warn", "That's " + Math.round(dist) +
     " nm from " + dest.name + " — worth re-reading the coordinates."]);
+  if (transiting) notes.push(["good", "Her track is set from the map: she passes " +
+    dest.name + " at " + cpa.nm.toFixed(1) + " nm rather than coming in. Times below " +
+    "are for that track."]);
 
-  // Optional flying leg.
+  // Optional flying leg. You meet her where her track first cuts the ring.
   const aSpeed = num("inAsset");
   let asset = null;
   if (aSpeed && aSpeed > 0) {
     const baseVal = $("baseSel").value;
     const base = baseVal === "__same" ? dest : (dests[parseInt(baseVal, 10)] || dest);
-    /* The meeting happens on a ring and nowhere else, so a lift time is simply
-       when she gets there, less the flying time out to it. */
     asset = {
       base, speed: aSpeed,
-      legs: legs.filter(l => l.ring > 0 && !l.inside).map(l => {
-        const outbound = distanceNm(base, l.at || dest);
+      legs: legs.filter(l => l.entry).map(l => {
+        const outbound = distanceNm(base, l.entry.at);
         const flyH = outbound / aSpeed;
         return {
           name: l.ring + " nm ring",
           outbound,
           flyH,
-          liftH: l.hours == null ? null : l.hours - flyH
+          liftH: l.entry.hours == null ? null : l.entry.hours - flyH
         };
       })
     };
   }
 
-  model = { dest, reported, now, moved, age, dist, distAtReport, brg, speed, legs, notes, asset, t0 };
+  model = { dest, reported, now, moved, age, dist, distAtReport, brg, speed, legs, notes,
+            asset, t0, transiting, target, trackBrg, trackLen, cpa, arrival };
 }
 
 const pad3 = v => String(Math.round(v) % 360).padStart(3, "0");
@@ -803,43 +854,93 @@ function renderResults() {
 
   const html = [];
 
-  // Headline: the destination leg.
-  const main = model.legs[model.legs.length - 1];
+  // Headline: how far off the port she is now, and what happens next.
   html.push('<div class="headline">');
   html.push('<div class="k">Distance to ' + esc(model.dest.name) + "</div>");
   html.push('<div class="big">' + model.dist.toFixed(1) + "<small>nm</small></div>");
-  if (main.hours != null) {
-    html.push('<div class="sub">Alongside <b>' + fmtClock(at(main.hours), true) +
-      "</b> · " + fmtRun(main.hours) + " at " + model.speed.toFixed(1) + " kt</div>");
+  if (model.arrival && model.arrival.hours != null) {
+    html.push('<div class="sub">Alongside <b>' + fmtClock(at(model.arrival.hours), true) +
+      "</b> \u00B7 " + fmtRun(model.arrival.hours) + " at " + model.speed.toFixed(1) + " kt</div>");
+  } else if (model.transiting && model.cpa.hours != null) {
+    html.push('<div class="sub">Passing \u2014 closest <b>' + model.cpa.nm.toFixed(1) +
+      " nm</b> at " + fmtClock(at(model.cpa.hours), true) + "</div>");
   } else {
-    html.push('<div class="sub">Bearing ' + pad3(model.brg) + "° — add a speed for times</div>");
+    html.push('<div class="sub">Bearing ' + pad3(model.brg) + "\u00B0 \u2014 add a speed for times</div>");
   }
   html.push("</div>");
 
-  // Each ring, then the destination again with its crossing position.
   html.push('<section class="panel"><h2>Ranges</h2>');
-  model.legs.forEach((l, i) => {
-    html.push('<div class="leg' + (l.inside ? " inside" : "") + '">');
-    html.push('<div class="name">' + (l.ring ? "In to the <b>" + l.ring + " nm</b> ring"
-                                             : "Alongside <b>" + esc(model.dest.name) + "</b>") + "</div>");
-    html.push('<div class="figs">');
-    if (l.inside) {
-      html.push('<div class="eta">Already inside</div>');
-    } else if (l.hours != null) {
-      html.push('<div class="eta">' + fmtClock(at(l.hours), true) + "</div>");
-      html.push('<div class="run">' + fmtRun(l.hours) + "</div>");
+
+  const line = (k, v, cls) =>
+    '<div class="at"><span style="color:var(--ink-dim);min-width:4.6em;display:inline-block">' +
+    esc(k) + '</span><span class="' + (cls || "") + '">' + v + "</span></div>";
+  const posLine = pt => {
+    const c = fmtDDM(pt.at);
+    return '<div class="at"><span class="mono">' + c + "</span>" +
+      '<button class="copy-chip" type="button" data-copy="' + esc(c) + '">Copy</button></div>';
+  };
+
+  model.legs.forEach(l => {
+    html.push('<div class="leg' + (l.misses ? " inside" : "") + '">');
+    html.push('<div class="name">In to the <b>' + l.ring + " nm</b> ring</div>");
+
+    if (l.misses) {
+      html.push('<div class="figs"><div class="eta" style="color:var(--amber);font-size:1.05rem">' +
+        "Never comes inside</div><div class=\"dist\">closest " + model.cpa.nm.toFixed(1) +
+        " nm</div></div>");
     } else {
-      html.push('<div class="eta">—</div>');
-    }
-    html.push('<div class="dist">' + l.togo.toFixed(1) + " nm to run</div>");
-    html.push("</div>");
-    if (l.at && !l.inside) {
-      const c = fmtDDM(l.at);
-      html.push('<div class="at"><span class="mono">' + c + "</span>" +
-        '<button class="copy-chip" type="button" data-copy="' + esc(c) + '">Copy</button></div>');
+      html.push('<div class="figs">');
+      if (l.entry) {
+        html.push('<div class="eta">' + (l.entry.hours == null ? "\u2014"
+          : fmtClock(at(l.entry.hours), true)) + "</div>");
+        if (l.entry.hours != null) html.push('<div class="run">' + fmtRun(l.entry.hours) + "</div>");
+        html.push('<div class="dist">' + l.entry.s.toFixed(1) + " nm to run</div>");
+      } else {
+        html.push('<div class="eta">Already inside</div>');
+      }
+      html.push("</div>");
+      if (l.entry) html.push(posLine(l.entry));
+
+      // Passing by, when she leaves again is as much the job as when she arrives.
+      if (model.transiting) {
+        html.push(line("closest", model.cpa.nm.toFixed(1) + " nm at " +
+          (model.cpa.hours == null ? "\u2014" : fmtClock(at(model.cpa.hours), true))));
+        if (l.exit) {
+          html.push(line("leaves", l.exit.hours == null ? "\u2014"
+            : fmtClock(at(l.exit.hours), true) + " \u00B7 " +
+              fmtRun(Math.max(0, l.exit.hours - (l.entry ? l.entry.hours : 0))) + " inside"));
+        } else if (l.openEnded) {
+          html.push(line("leaves", "still inside where her track ends"));
+        }
+      }
     }
     html.push("</div>");
   });
+
+  // The port itself: an arrival if she's coming in, otherwise her closest pass.
+  html.push('<div class="leg">');
+  if (model.arrival) {
+    html.push('<div class="name">Alongside <b>' + esc(model.dest.name) + "</b></div>");
+    html.push('<div class="figs">');
+    html.push('<div class="eta">' + (model.arrival.hours == null ? "\u2014"
+      : fmtClock(at(model.arrival.hours), true)) + "</div>");
+    if (model.arrival.hours != null)
+      html.push('<div class="run">' + fmtRun(model.arrival.hours) + "</div>");
+    html.push('<div class="dist">' + model.arrival.togo.toFixed(1) + " nm to run</div>");
+    html.push("</div>");
+    html.push(posLine(model.arrival));
+  } else {
+    html.push('<div class="name">Closest to <b>' + esc(model.dest.name) + "</b></div>");
+    html.push('<div class="figs">');
+    html.push('<div class="eta">' + (model.cpa.hours == null ? "\u2014"
+      : fmtClock(at(model.cpa.hours), true)) + "</div>");
+    if (model.cpa.hours != null)
+      html.push('<div class="run">' + fmtRun(model.cpa.hours) + "</div>");
+    html.push('<div class="dist">' + model.cpa.nm.toFixed(1) + " nm off</div>");
+    html.push("</div>");
+    html.push(posLine(model.cpa));
+  }
+  html.push("</div>");
   html.push("</section>");
 
   html.push('<section class="panel"><h2>Check</h2>');
@@ -974,7 +1075,10 @@ function drawTrack() {
    can't take the app down. The tiles do come off the network: without them the
    basemap is blank and everything else — rings, track, positions — still draws
    and is still exact. */
-let map = null, overlay = null, shipMarker = null, placing = false, tilesFailed = false;
+let map = null, overlay = null, tilesFailed = false;
+/* Where she's steaming, when it isn't the port. Set by dragging the end of her
+   track on the map; null means she's coming straight in. */
+let trackTo = null;
 
 function ensureMap() {
   if (map) return;
@@ -997,48 +1101,70 @@ function ensureMap() {
   });
   tiles.addTo(map);
   overlay = L.layerGroup().addTo(map);
+  map.on("zoomend moveend", () => setTimeout(declutter, 0));
 
-  map.on("click", e => {
-    if (!placing) return;
-    setShipFromMap(e.latlng.lat, e.latlng.lng);
-    armPlacing(false);
-  });
 }
 
 function noteMap(text, kind) {
   const el = $("mapNote");
   el.className = "hint" + (kind ? " " + kind : "");
-  el.textContent = text || (placing
-    ? "Tap the map where she is."
-    : "Drag the ship to move her, or arm the button above and tap where she is. " +
-      "Either way the position is taken as where she is right now.");
+  el.textContent = text || (trackTo
+    ? "Her track is set by hand \u2014 she passes the port rather than coming in. " +
+      "Drag the open end again to adjust it, or put it back to the port."
+    : "Drag the open end of her track to where she's actually heading, for when " +
+      "she's passing rather than coming in. Her position comes off the Calculate " +
+      "tab, not off this map.");
 }
 
-function armPlacing(on) {
-  placing = on;
-  $("placeBtn").classList.toggle("on", on);
-  $("placeBtn").textContent = on ? "Tap the map…" : "Tap map to place ship";
-  if (map) L.DomUtil[on ? "addClass" : "removeClass"](map.getContainer(), "leaflet-crosshair");
-  if (map) map.getContainer().style.cursor = on ? "crosshair" : "";
-  noteMap();
-}
-
-/* Putting her somewhere on the map means that's where she is now, so the
-   position age goes back to zero rather than being applied a second time. */
-function setShipFromMap(lat, lon) {
-  $("inPos").value = fmtDDM({ lat, lon });
-  $("inAge").value = "";
+/* She steams towards whatever this is, and the rings stay where they are:
+   around the port you fly from. */
+function setTrackFromMap(lat, lon) {
+  trackTo = { lat, lon };
   saveInputs();
   render();
+  $("resetTrackBtn").style.display = "";
 }
 
-function labelled(layer, text, dim, dir) {
+function resetTrack() {
+  trackTo = null;
+  saveInputs();
+  render();
+  drawMap(true);
+  $("resetTrackBtn").style.display = "none";
+}
+
+function labelled(layer, text, dim, dir, prio) {
   dir = dir || "right";
   return layer.bindTooltip(text, {
     permanent: true, direction: dir,
     offset: dir === "left" ? [-12, 0] : dir === "top" ? [0, -11]
           : dir === "bottom" ? [0, 11] : [12, 0],
-    className: "lbl" + (dim ? " dim" : "")
+    className: "lbl p" + (prio || 5) + (dim ? " dim" : "")
+  });
+}
+
+/* Zoomed out far enough, every label lands on its neighbour or falls off the
+   edge. Keep them in order of what you'd actually look for, and hide any that
+   won't fit — the figures are all in the strip below the map anyway. */
+function declutter() {
+  if (!map) return;
+  const pane = map.getPane("tooltipPane");
+  if (!pane) return;
+  const box = map.getContainer().getBoundingClientRect();
+  const els = Array.from(pane.querySelectorAll(".leaflet-tooltip"));
+  els.forEach(el => { el.style.visibility = ""; });
+  els.sort((a, b) => {
+    const p = el => { const m = /\bp(\d)\b/.exec(el.className); return m ? +m[1] : 9; };
+    return p(a) - p(b);
+  });
+  const kept = [];
+  els.forEach(el => {
+    const r = el.getBoundingClientRect();
+    const offEdge = r.left < box.left || r.right > box.right ||
+                    r.top < box.top || r.bottom > box.bottom;
+    const clash = kept.some(k => r.left < k.right && r.right > k.left &&
+                                 r.top < k.bottom && r.bottom > k.top);
+    if (offEdge || clash) el.style.visibility = "hidden"; else kept.push(r);
   });
 }
 
@@ -1046,7 +1172,6 @@ function drawMap(fit) {
   if (!map) return;
   map.invalidateSize();
   overlay.clearLayers();
-  shipMarker = null;
   renderMapSummary();
   if (!model) return;
 
@@ -1055,10 +1180,10 @@ function drawMap(fit) {
 
   // Range rings, as circles on the ground around the destination.
   model.legs.forEach(l => {
-    if (!l.ring) return;
     L.circle(dest, {
       radius: l.ring * 1852, color: "#38c8e8", weight: 1.5,
-      opacity: l.inside ? 0.35 : 0.75, fill: false, dashArray: l.inside ? "4 6" : null
+      opacity: l.misses ? 0.3 : 0.75, fill: false,
+      dashArray: (l.insideNow || l.misses) ? "4 6" : null
     }).addTo(overlay);
   });
 
@@ -1066,10 +1191,22 @@ function drawMap(fit) {
      a straight line on a Mercator map is not that path. */
   const pts = [];
   for (let i = 0; i <= 64; i++) {
-    const p = along(model.now, model.brg, model.dist * i / 64);
+    const p = along(model.now, model.trackBrg, model.trackLen * i / 64);
     pts.push([p.lat, p.lon]);
   }
   L.polyline(pts, { color: "#e8b638", weight: 2, opacity: 0.85 }).addTo(overlay);
+
+  // How close she actually gets, when she's only passing.
+  if (model.transiting) {
+    L.polyline([[model.cpa.at.lat, model.cpa.at.lon], [model.dest.lat, model.dest.lon]],
+      { color: "#6d8ba0", weight: 1, opacity: 0.6, dashArray: "2 5" }).addTo(overlay);
+    labelled(L.marker([model.cpa.at.lat, model.cpa.at.lon], {
+      icon: L.divIcon({ className: "", html: '<i class="pin pin-cross"></i>', iconSize: [11, 11] }),
+      interactive: false
+    }), "closest " + model.cpa.nm.toFixed(0) + " nm \u00B7 " +
+        (model.cpa.hours == null ? "\u2014" : fmtClock(at(model.cpa.hours), true)),
+       true, "bottom", 3).addTo(overlay);
+  }
 
   // Where she was when the position was reported, if it wasn't just now.
   if (model.moved > 0.05) {
@@ -1078,7 +1215,7 @@ function drawMap(fit) {
     labelled(L.marker([model.reported.lat, model.reported.lon], {
       icon: L.divIcon({ className: "", html: '<i class="pin pin-old"></i>', iconSize: [10, 10] }),
       interactive: false
-    }), "reported " + fmtRun(model.age / 60) + " ago", true, "left").addTo(overlay);
+    }), "reported " + fmtRun(model.age / 60) + " ago", true, "left", 5).addTo(overlay);
   }
 
   // Ring crossings.
@@ -1087,45 +1224,60 @@ function drawMap(fit) {
      below — and they stack above and below to stay off each other. */
   let crossing = 0;
   model.legs.forEach(l => {
-    if (!l.ring || l.inside || !l.at) return;
-    labelled(L.marker([l.at.lat, l.at.lon], {
+    if (!l.entry) return;
+    labelled(L.marker([l.entry.at.lat, l.entry.at.lon], {
       icon: L.divIcon({ className: "", html: '<i class="pin pin-cross"></i>', iconSize: [11, 11] }),
       interactive: false
-    }), l.ring + " nm · " + (l.hours == null ? "—" : fmtClock(at(l.hours), false)),
-       false, crossing++ % 2 ? "bottom" : "top").addTo(overlay);
+    }), l.ring + " nm \u00B7 " + (l.entry.hours == null ? "\u2014"
+          : fmtClock(at(l.entry.hours), true)),
+       false, crossing++ % 2 ? "bottom" : "top", 2).addTo(overlay);
   });
 
   // Destination, and the airfield when it's somewhere else.
+  const destLabel = model.dest.name + " \u00B7 " + model.dist.toFixed(0) + " nm" +
+    (model.arrival && model.arrival.hours != null
+      ? " \u00B7 " + fmtClock(at(model.arrival.hours), true) : "");
   labelled(L.marker(dest, {
     icon: L.divIcon({ className: "", html: '<i class="pin pin-dest"></i>', iconSize: [16, 16] }),
     interactive: false
-  }), model.dest.name).addTo(overlay);
+  }), destLabel, false, "right", 1).addTo(overlay);
 
   if (model.asset && model.asset.base !== model.dest) {
     labelled(L.marker([model.asset.base.lat, model.asset.base.lon], {
       icon: L.divIcon({ className: "", html: '<i class="pin pin-base"></i>', iconSize: [14, 14] }),
       interactive: false
-    }), model.asset.base.name, true).addTo(overlay);
+    }), model.asset.base.name, true, "right", 4).addTo(overlay);
   }
 
   // The ship herself — draggable, which is the quickest way to correct her.
   /* The hull points down her track, and the 30px box around it is what your
      finger actually has to hit. */
-  shipMarker = L.marker(now, {
-    draggable: true, autoPan: true,
+  L.marker(now, {
+    interactive: false,
     icon: L.divIcon({
       className: "",
       html: '<span class="pin-ship-wrap" style="transform:rotate(' +
-            (model.brg - 90).toFixed(1) + 'deg)"><i class="pin pin-ship"></i></span>',
+            (model.trackBrg - 90).toFixed(1) + 'deg)"><i class="pin pin-ship"></i></span>',
       iconSize: [30, 30], iconAnchor: [15, 15]
     })
   }).addTo(overlay);
-  shipMarker.on("dragend", e => {
+
+  /* The open end of her track is the handle. Drag it to where she's really
+     heading, for when she's passing rather than coming in. */
+  const handle = L.marker(model.transiting ? [model.target.lat, model.target.lon] : dest, {
+    draggable: true, autoPan: true,
+    icon: L.divIcon({ className: "", html: '<span class="pin-handle-wrap">' +
+      '<i class="pin pin-handle"></i></span>', iconSize: [30, 30], iconAnchor: [15, 15] })
+  }).addTo(overlay);
+  if (model.transiting) labelled(handle, "heading for here", true, "bottom", 4);
+  handle.on("dragend", e => {
     const ll = e.target.getLatLng();
-    setShipFromMap(ll.lat, ll.lng);
+    setTrackFromMap(ll.lat, ll.lng);
   });
 
   if (fit) fitMap();
+  noteMap();
+  setTimeout(declutter, 0);
 }
 
 function fitMap() {
@@ -1135,6 +1287,7 @@ function fitMap() {
   const widest = model.legs.reduce((m, l) => Math.max(m, l.ring), 0);
   if (widest) b.extend(L.latLng(model.dest.lat, model.dest.lon).toBounds(widest * 2 * 1852));
   if (model.asset) b.extend([model.asset.base.lat, model.asset.base.lon]);
+  if (model.transiting) b.extend([model.target.lat, model.target.lon]);
   // Room on the right for the destination's label, rather than clipping it.
   map.fitBounds(b, { paddingTopLeft: [40, 40], paddingBottomRight: [118, 40] });
 }
@@ -1148,14 +1301,16 @@ function renderMapSummary() {
       "Enter the ship's position, or tap the map</div></div>";
     return;
   }
-  const cells = [["To run", model.dist.toFixed(1) + " nm", true],
+  const cells = [["To the port", model.dist.toFixed(1) + " nm", true],
                  ["Bearing", pad3(model.brg) + "\u00B0", false]];
-  const main = model.legs[model.legs.length - 1];
-  cells.push(["Alongside", main.hours == null ? "—" : fmtClock(at(main.hours), true), true]);
+  cells.push(model.arrival
+    ? ["Alongside", model.arrival.hours == null ? "\u2014"
+        : fmtClock(at(model.arrival.hours), true), true]
+    : ["Closest", model.cpa.nm.toFixed(1) + " nm", true]);
   model.legs.forEach(l => {
-    if (!l.ring) return;
     cells.push([l.ring + " nm ring",
-      l.inside ? "inside" : (l.hours == null ? "—" : fmtClock(at(l.hours), true)), true]);
+      l.misses ? "never" : l.insideNow ? "inside"
+        : (l.entry.hours == null ? "\u2014" : fmtClock(at(l.entry.hours), true)), true]);
   });
   box.innerHTML = cells.map(([k, v, a]) =>
     '<div class="cell"><div class="k">' + esc(k) + '</div><div class="v' +
@@ -1173,18 +1328,38 @@ function briefText() {
   L.push("Dest     " + model.dest.name + "  " + fmtDDM(model.dest));
   L.push("Run in   " + model.dist.toFixed(1) + " nm, bearing " + pad3(model.brg) + "°" +
     (model.speed > 0 ? ", " + model.speed.toFixed(1) + " kt" : ""));
+  if (model.transiting) {
+    L.push("Passing, not coming in: track set for " + fmtDDM(model.target));
+  }
   L.push("");
-  const nameW = Math.max(...model.legs.map(l => (l.ring ? l.ring + " nm ring" : model.dest.name).length)) + 2;
-  const times = model.legs.map(l => l.inside ? "already inside"
-    : l.hours == null ? "no speed" : fmtClock(at(l.hours), true) + "  " + fmtRun(l.hours));
-  const timeW = Math.max(...times.map(t => t.length)) + 2;
-  model.legs.forEach((l, i) => {
-    const label = (l.ring ? l.ring + " nm ring" : model.dest.name).padEnd(nameW, " ");
-    if (l.inside) { L.push(label + "already inside"); return; }
-    L.push(label + times[i].padEnd(timeW, " ") +
-      (l.togo.toFixed(1) + " nm").padStart(9, " ") +
-      (l.at ? "   " + fmtDDM(l.at) : ""));
+  const rows = model.legs.map(l => {
+    const name = l.ring + " nm ring";
+    if (l.misses) return [name, "never comes inside", "closest " + model.cpa.nm.toFixed(1) + " nm", ""];
+    if (!l.entry) return [name, "already inside", "", ""];
+    return [name,
+      l.entry.hours == null ? "no speed" : fmtClock(at(l.entry.hours), true) + "  " + fmtRun(l.entry.hours),
+      l.entry.s.toFixed(1) + " nm", fmtDDM(l.entry.at)];
   });
+  if (model.arrival) {
+    rows.push([model.dest.name,
+      model.arrival.hours == null ? "no speed"
+        : fmtClock(at(model.arrival.hours), true) + "  " + fmtRun(model.arrival.hours),
+      model.arrival.togo.toFixed(1) + " nm", fmtDDM(model.arrival.at)]);
+  } else {
+    rows.push(["closest to " + model.dest.name,
+      model.cpa.hours == null ? "no speed" : fmtClock(at(model.cpa.hours), true),
+      model.cpa.nm.toFixed(1) + " nm off", fmtDDM(model.cpa.at)]);
+  }
+  const w = n => Math.max(...rows.map(r => r[n].length)) + 2;
+  const w0 = w(0), w1 = w(1), w2 = w(2);
+  rows.forEach(r => L.push(r[0].padEnd(w0) + r[1].padEnd(w1) +
+    r[2].padStart(w2 - 2) + (r[3] ? "   " + r[3] : "")));
+  if (model.transiting) {
+    model.legs.forEach(l => {
+      if (l.misses || !l.exit) return;
+      L.push("  leaves the " + l.ring + " nm ring " + fmtClock(at(l.exit.hours), true));
+    });
+  }
   if (model.asset && model.asset.legs.length) {
     const a = model.asset;
     L.push("");
@@ -1197,7 +1372,8 @@ function briefText() {
     });
   }
   L.push("");
-  L.push("Great-circle, assuming she holds course and speed.");
+  L.push("Great-circle, assuming she holds " +
+    (model.transiting ? "that track" : "course") + " and speed.");
   return L.join("\n");
 }
 
@@ -1295,6 +1471,7 @@ $("pageTabs").addEventListener("click", e => {
   if (page === "calc") render();
   if (page === "map") {
     ensureMap();
+    $("resetTrackBtn").style.display = trackTo ? "" : "none";
     compute();
     // The container had no size until now, so Leaflet has to be told.
     setTimeout(() => drawMap(true), 0);
@@ -1324,7 +1501,7 @@ $("results").addEventListener("click", e => {
   if (b) copyText(b.dataset.copy, b, "Copied");
 });
 
-$("placeBtn").addEventListener("click", () => armPlacing(!placing));
+$("resetTrackBtn").addEventListener("click", resetTrack);
 $("fitBtn").addEventListener("click", fitMap);
 
 $("dSave").addEventListener("click", saveDest);

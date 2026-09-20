@@ -20,6 +20,7 @@ the symbols — add her speed, and you get:
 | Distance and ETA to the port | and to each range ring |
 | The position she'll be at when she crosses a ring | the figure you pass to the crew |
 | Lift times | the latest you can be off the ground and still meet her there |
+| Closest approach | when she's passing rather than coming in |
 
 **Position age** matters: the position on MarineTraffic is usually minutes
 old, so put in how old and she's carried forward from it. Everything then
@@ -37,9 +38,14 @@ the browser, and once it's loaded the page works with no signal at all.
 The **Map** tab plots the whole picture: the port, your range rings as circles
 on the ground, her track in, where she crosses each ring, and the ship herself.
 
-You can set her position from it rather than typing anything — **drag the ship**
-to where she is, or press **Tap map to place ship** and tap the spot. Either way
-it's taken as where she is *now*, so the position age is cleared.
+**When she isn't coming in**, drag the open end of her track to where she's
+actually heading — past the port and on up the coast, say. The rings stay where
+they are, around the port you fly from, and you get when she crosses into each
+one, how close she gets and when she's out of it again. *Track back to port*
+undoes it.
+
+Her position always comes off the Calculate tab, never off the map: the map
+doesn't move the ship.
 
 The tiles come from OpenStreetMap and are the one thing the app fetches from the
 network. With no signal you lose the coastline and nothing else: the rings,
@@ -81,5 +87,5 @@ Bump the version on every functional change, in all four places at once: the
 `<title>`, the `.version` span, `CACHE` in `sw.js`, and *Current* below. It's
 the only way to confirm a deploy actually landed.
 
-Current: **v1.5**. (v1.0 to v1.2 were built before the app moved to its own
+Current: **v1.6**. (v1.0 to v1.2 were built before the app moved to its own
 repository.)

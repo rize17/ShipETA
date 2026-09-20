@@ -42,6 +42,17 @@ package manager.
   80 nm — the outer limit and the range normally flown. Don't reintroduce a
   "meet her wherever the arithmetic lands" figure; it offers something that
   can't be flown.
+- **Her track and the rings are separate things.** She's assumed to steam
+  straight at the destination until a track is set on the map, for the case
+  where she's only passing — coming by the port and clipping a ring rather than
+  coming in. The rings stay centred on the destination either way, because that
+  is where the aircraft flies from. With a track set there's no arrival time at
+  all, only a closest approach: don't invent one.
+- **Ring crossings are solved numerically, not algebraically.** Distance from
+  the port along her track falls to a closest approach and climbs again, so the
+  crossings are a ternary search for the bottom and a bisection either side of
+  it. With no track set this reduces exactly to `distance - ring`, which is
+  worth keeping true — it's the test that says the solver hasn't drifted.
 - **A lift time is her arrival at a ring less the flying time out to it.**
   Nothing is subtracted for getting the machine ready; that's worked out
   separately and deliberately isn't modelled here.
@@ -68,16 +79,20 @@ herself, and it's the quickest way to both check a position and set one.
 - **The track is drawn as a great circle**, sampled at 64 points along the same
   path the ETAs are worked on. A straight line between two points on a Mercator
   map is a different path — don't "simplify" it to a two-point polyline.
-- **Placing her on the map clears the position age.** Putting her somewhere by
-  hand means that's where she is *now*, so applying the age on top would carry
-  her forward a second time. Dragging the ship marker and arming the tap button
-  both go through `setShipFromMap`, which is where that happens.
-- **Tap-to-place is armed deliberately**, rather than any tap on the map moving
-  the ship. A stray tap silently relocating a vessel mid-job is worse than one
-  extra press. The ship marker is draggable without arming anything, because
-  grabbing her is unambiguous.
-- **The ship's grab area is 30px square** with the hull drawn inside it. The
-  hull alone is about 13px and far too small for a finger — keep the wrapper.
+- **The map never moves the ship.** Her position is transcribed from
+  MarineTraffic on the Calculate tab and that is the only place it comes from.
+  The one draggable thing is the open end of her track.
+- **Grab areas are 30px square** with the marker drawn inside them. The hull
+  and the track handle are about 13px, far too small for a finger — keep the
+  wrappers.
+- **Labels are decluttered by hand.** Zoomed out, permanent tooltips sit on
+  each other and hang off the edge. `declutter()` keeps them in priority order
+  — port, ring crossings, closest approach, track end, reported position — and
+  hides whatever doesn't fit. Every figure it hides is in the strip below the
+  map, so nothing is lost. Give any new label a priority.
+- **Times on the map carry the day**, not just the clock. "15:49" alone doesn't
+  say whether that's this afternoon or Tuesday, and these runs are often more
+  than a day.
 
 ## Storage
 
