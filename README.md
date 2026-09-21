@@ -26,21 +26,20 @@ the symbols — add her speed, and you get:
 old, so put in how old and she's carried forward from it. Everything then
 reads from now rather than from whenever the AIS message landed.
 
+**No airfield is chosen for you.** Every one you've saved gets its rings drawn,
+and every crossing she'll make of every ring is listed with its time, how far
+she still has to run to it, the position, and the latest you could lift from
+that airfield and still be there. Soonest first. You pick.
+
 The **cog** in the top corner holds two lists you set once. **Ports** are where
-she may be heading; **airfields** are where you fly from. The range rings are
-measured from the airfield, because that's what decides whether you can reach
-her — pick the nearest one with fuel and the rings follow. Airfields are
-offered round the coast from Cape Town: FACT, FAMO, FAGG, FAPE, FAEL, FAMG,
-FALE, FARB, then FASD and FASB up the west side.
+she may be heading; **airfields** are where you fly from. Rings are measured
+from each airfield, because that's what decides whether you can reach her.
 
 *Reset built-in places to defaults* puts every one of them back to the position
 it shipped with; anything you added yourself is left alone.
 
-On the map, every *other* airfield's rings are drawn dotted as well, so you can
-see at a glance whether somewhere else along the coast is the shorter flight.
-The ones she actually passes inside are picked out; the rest stay faint. If one
-of them is more than 10 nm closer than the airfield you've chosen, the Calculate
-tab says so. *Other airfields* turns it off.
+On the map the airfields she comes into range of are drawn to be read; the rest
+stay faint so you can still see where they are.
 
 The seeded port positions are rounded harbour entrances. The seeded airfield
 positions are approximate and **unverified** — check every one against the AIP
@@ -103,5 +102,5 @@ Bump the version on every functional change, in all four places at once: the
 `<title>`, the `.version` span, `CACHE` in `sw.js`, and *Current* below. It's
 the only way to confirm a deploy actually landed.
 
-Current: **v2.3**. (v1.0 to v1.2 were built before the app moved to its own
+Current: **v3.0**. (v1.0 to v1.2 were built before the app moved to its own
 repository.)

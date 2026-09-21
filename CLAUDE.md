@@ -53,11 +53,16 @@ package manager.
   pickers, and the distinction is the whole point of the app — don't collapse
   them back into one list. Measuring the rings from the port put the crossing
   points ~9 nm outside the fuel radius on a Cape Town job.
-- **Every airfield gets a closest approach, not just the chosen one.**
-  `model.others` carries one for each, which draws the dotted rings on the map
-  and backs the prompt that names a nearer airfield. It's the same `approach()`
-  used for the selected one, so the two can't drift apart. The prompt only
-  fires at 10 nm better, to stay quiet when it's a wash.
+- **Nothing picks an airfield.** `model.fields` holds every one, each with its
+  own closest approach and its own ring crossings; `inRange` is those she
+  actually reaches, soonest first, and that list *is* the answer. Don't
+  reintroduce a "departure airfield" selector — the whole point is that the
+  operator compares the options and decides, and a selector hides the one they
+  might have picked.
+- **A lift time needs no flying distance.** A crossing of an airfield's own
+  ring is that ring's distance from it by definition, so the flight out is
+  `ring / cruise speed` and the lift time is the crossing less that. It falls
+  out of the geometry; don't compute a distance for it.
 - **Airfields are offered in coastal order, not storage order.** `FIELD_ORDER`
   runs round the coast from Cape Town and back up the west side, and both the
   picker and the list sort by it, so an old saved list comes out in the same
@@ -109,7 +114,7 @@ package manager.
 
 ## The map
 
-A third tab, built on the vendored Leaflet. It plots the destination, the range
+The page the app opens on, built on the vendored Leaflet. It plots the destination, the range
 rings as circles on the ground, her track in, the ring crossings and the ship
 herself, and it's the quickest way to both check a position and set one.
 
