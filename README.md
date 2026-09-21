@@ -20,15 +20,20 @@ the symbols — add her speed, and you get:
 | Distance and ETA to the port | and to each range ring |
 | The position she'll be at when she crosses a ring | the figure you pass to the crew |
 | Lift times | the latest you can be off the ground and still meet her there |
-| Closest approach | when she's passing rather than coming in |
+| Closest approach | how near she gets to the airfield, and when |
 
 **Position age** matters: the position on MarineTraffic is usually minutes
 old, so put in how old and she's carried forward from it. Everything then
 reads from now rather than from whenever the AIS message landed.
 
-The **Destinations** tab holds the ports you use, seeded with the South
-African ones. Those seeded positions are rounded harbour entrances — check
-them against your own chart and correct them here.
+The **Places** tab holds two lists. **Ports** are where she may be heading;
+**airfields** are where you fly from. The range rings are measured from the
+airfield, because that's what decides whether you can reach her — pick the
+nearest one with fuel and the rings follow.
+
+The seeded port positions are rounded harbour entrances. The seeded airfield
+positions are approximate and **unverified** — check every one against the AIP
+before anyone plans fuel on it, and correct it in the app.
 
 Nothing is sent anywhere. The destinations and the last job you typed live in
 the browser, and once it's loaded the page works with no signal at all.
@@ -87,5 +92,5 @@ Bump the version on every functional change, in all four places at once: the
 `<title>`, the `.version` span, `CACHE` in `sw.js`, and *Current* below. It's
 the only way to confirm a deploy actually landed.
 
-Current: **v1.8**. (v1.0 to v1.2 were built before the app moved to its own
+Current: **v2.0**. (v1.0 to v1.2 were built before the app moved to its own
 repository.)

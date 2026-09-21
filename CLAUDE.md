@@ -46,6 +46,17 @@ package manager.
   80 nm — the outer limit and the range normally flown. Don't reintroduce a
   "meet her wherever the arithmetic lands" figure; it offers something that
   can't be flown.
+- **The rings are around the airfield, not the port.** What decides whether we
+  can reach her is the fuel radius from where we take off, so that's where the
+  rings are centred. The port only decides where she's going. They're two
+  separate saved places (`type: "port"` and `type: "airport"`) and two separate
+  pickers, and the distinction is the whole point of the app — don't collapse
+  them back into one list. Measuring the rings from the port put the crossing
+  points ~9 nm outside the fuel radius on a Cape Town job.
+- **The airfield positions shipped with the app are unverified.** They are
+  approximate ICAO reference points, flagged as such in the list and in the UI,
+  and are editable. Never describe them as authoritative, and keep that warning
+  visible.
 - **Her track and the rings are separate things.** She's assumed to steam
   straight at the destination until a track is set on the map, for the case
   where she's only passing — coming by the port and clipping a ring rather than
@@ -100,7 +111,7 @@ herself, and it's the quickest way to both check a position and set one.
 
 ## Storage
 
-Destinations and the last job typed live in `localStorage` under `shipeta.*`,
+Places and the last job typed live in `localStorage` under `shipeta.*`,
 with an in-memory fallback if it's unavailable. There is no server and no
 account. `index.html` carries a one-time migration from the `medivac.*` keys
 the app used at its previous address — same host, so the data is still

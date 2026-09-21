@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v1.8</title>
+<title>Ship ETA v2.0</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -291,7 +291,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v1.8</span></h1>
+  <h1>Ship ETA<span class="version">v2.0</span></h1>
   <button id="tzBtn" type="button" title="Switch between local time and UTC">
     <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
   </button>
@@ -300,7 +300,7 @@
 <nav class="view-tabs" id="pageTabs">
   <button class="view-tab active" type="button" data-page="calc">Calculate</button>
   <button class="view-tab" type="button" data-page="map">Map</button>
-  <button class="view-tab" type="button" data-page="dest">Destinations</button>
+  <button class="view-tab" type="button" data-page="dest">Places</button>
 </nav>
 
 <!-- ======================= CALCULATE ======================= -->
@@ -309,9 +309,13 @@
   <section class="panel">
     <h2>The job</h2>
 
-    <label for="destSel">Destination</label>
+    <label for="destSel">Destination (where she's heading)</label>
     <select id="destSel"></select>
     <div class="hint mono" id="destEcho"></div>
+
+    <label for="airSel">Departure airfield (rings are from here)</label>
+    <select id="airSel"></select>
+    <div class="hint mono" id="airEcho"></div>
 
     <label for="inPos">Ship's position</label>
     <input id="inPos" spellcheck="false" autocapitalize="characters"
@@ -348,11 +352,9 @@
     <summary>Response asset (optional)</summary>
     <label for="inAsset">Cruise speed (kt)</label>
     <input id="inAsset" inputmode="decimal" placeholder="110">
-    <label for="baseSel">Flying from</label>
-    <select id="baseSel"></select>
-    <div class="hint">A lift time is the latest you can be off the ground and still meet her
-      at that ring. Getting the machine ready is your own business — this doesn't
-      allow for it.</div>
+    <div class="hint">A lift time is the latest you can be off the ground at the departure
+      airfield and still meet her at that ring. Getting the machine ready is your own
+      business — this doesn't allow for it.</div>
     <div id="assetOut"></div>
   </details>
 
@@ -394,7 +396,12 @@
 <!-- ======================= DESTINATIONS ======================= -->
 <main id="pageDest" style="display:none">
   <section class="panel">
-    <h2 id="destFormTitle">Add a destination</h2>
+    <h2 id="destFormTitle">Add a place</h2>
+    <label for="dType">Kind</label>
+    <select id="dType">
+      <option value="port">Port — somewhere she may be heading</option>
+      <option value="airport">Airfield — somewhere we fly from</option>
+    </select>
     <label for="dName">Name</label>
     <input id="dName" placeholder="Cape Town Port">
     <label for="dPos">Position</label>
@@ -409,12 +416,23 @@
   </section>
 
   <section class="panel">
-    <h2>Saved</h2>
-    <div id="destList"></div>
-    <button class="ghost" id="dRestore" type="button">Restore the built-in list</button>
-    <div class="hint">The built-in positions are harbour entrances taken from published
-      port coordinates and rounded — check each one against your own chart before you rely
-      on it, and edit it here if it's out by more than you'd like.</div>
+    <h2>Ports</h2>
+    <div id="portList"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Airfields</h2>
+    <div id="fieldList"></div>
+    <div class="hint bad">The airfield positions that came with the app are approximate
+      and have not been verified. Check every one against the AIP before anyone plans
+      fuel or a range ring on it, and correct it here.</div>
+  </section>
+
+  <section class="panel">
+    <button class="ghost" id="dRestore" type="button" style="margin-top:0">Restore the built-in list</button>
+    <div class="hint">The built-in port positions are harbour entrances taken from published
+      coordinates and rounded — check each one against your own chart too, and edit it here
+      if it's out by more than you'd like.</div>
   </section>
 </main>
 
@@ -635,26 +653,61 @@ function tzLabel() {
   return "UTC" + s + h + (m ? ":" + String(m).padStart(2, "0") : "");
 }
 
-/* ================= destinations ================= */
-/* Harbour entrances, rounded to the nearest tenth of a minute. They're a
-   starting point, not a survey — they're editable for that reason. */
+/* ================= places ================= */
+/* Two kinds. Ports are where she's heading, and decide her track. Airfields
+   are where we fly from, and decide what we can reach — so the range rings are
+   drawn around the airfield, not the port. They're only the same thing when
+   the airfield happens to be at the port.
+
+   Every position here is a starting point, not survey data, and both kinds are
+   editable for that reason. The airfield positions especially want checking
+   against the AIP before anyone plans fuel on them. */
 const BUILT_IN = [
-  { name: "Cape Town Port",   lat: -33.8980, lon: 18.4270, note: "harbour entrance" },
-  { name: "Saldanha Bay",     lat: -33.016667, lon: 17.966667, note: "harbour entrance" },
-  { name: "Mossel Bay",       lat: -34.1800, lon: 22.1450, note: "harbour entrance" },
-  { name: "George Airport",   lat: -34.0056, lon: 22.3789, note: "FAGG" },
-  { name: "Gqeberha (PE)",    lat: -33.963333, lon: 25.630000, note: "harbour entrance" },
-  { name: "Ngqura (Coega)",   lat: -33.780000, lon: 25.691667, note: "harbour entrance" },
-  { name: "East London Port", lat: -33.025000, lon: 27.908333, note: "harbour entrance" },
-  { name: "Durban Port",      lat: -29.871667, lon: 31.041667, note: "harbour entrance" },
-  { name: "Richards Bay",     lat: -28.8050, lon: 32.0800, note: "harbour entrance" }
+  { type: "port", name: "Cape Town Port",   lat: -33.8980,   lon: 18.4270,   note: "harbour entrance" },
+  { type: "port", name: "Saldanha Bay",     lat: -33.016667, lon: 17.966667, note: "harbour entrance" },
+  { type: "port", name: "Mossel Bay",       lat: -34.1800,   lon: 22.1450,   note: "harbour entrance" },
+  { type: "port", name: "Gqeberha (PE)",    lat: -33.963333, lon: 25.630000, note: "harbour entrance" },
+  { type: "port", name: "Ngqura (Coega)",   lat: -33.780000, lon: 25.691667, note: "harbour entrance" },
+  { type: "port", name: "East London Port", lat: -33.025000, lon: 27.908333, note: "harbour entrance" },
+  { type: "port", name: "Durban Port",      lat: -29.871667, lon: 31.041667, note: "harbour entrance" },
+  { type: "port", name: "Richards Bay",     lat: -28.8050,   lon: 32.0800,   note: "harbour entrance" },
+
+  { type: "airport", name: "FACT Cape Town", lat: -33.9686, lon: 18.6014, note: "check against the AIP" },
+  { type: "airport", name: "FAGG George",    lat: -34.0056, lon: 22.3789, note: "check against the AIP" },
+  { type: "airport", name: "FAMO Mossel Bay",lat: -34.1583, lon: 22.0583, note: "check against the AIP" },
+  { type: "airport", name: "FAEL East London",lat: -33.0358, lon: 27.8258, note: "check against the AIP" },
+  { type: "airport", name: "FALE King Shaka", lat: -29.6153, lon: 31.1194, note: "check against the AIP" },
+  { type: "airport", name: "FASB Springbok",  lat: -29.6894, lon: 17.9394, note: "check against the AIP" }
 ];
 
-let dests = store.get("shipeta.dests", null);
-if (!Array.isArray(dests) || !dests.length) { dests = BUILT_IN.slice(); saveDests(); }
-function saveDests() { store.set("shipeta.dests", dests); }
+let places = store.get("shipeta.places", null);
+if (!Array.isArray(places) || !places.length) {
+  /* Upgrading from the single list, which was ports plus one airfield. */
+  const old = store.get("shipeta.dests", null);
+  places = (Array.isArray(old) && old.length)
+    ? old.map(p => {
+        const field = /airport|airfield/i.test(p.name) ||
+                      /^FA[A-Z]{2}$/i.test(String(p.note || "").trim());
+        return { type: field ? "airport" : "port",
+                 name: p.name === "George Airport" ? "FAGG George" : p.name,
+                 lat: p.lat, lon: p.lon, note: p.note || "" };
+      })
+    : BUILT_IN.slice();
+  savePlaces();
+}
+/* Anyone who was using this before the airfields existed gets them once, and
+   only once — so deleting one it doesn't want doesn't bring it back. */
+if (!store.get("shipeta.airfieldsSeeded", false)) {
+  BUILT_IN.filter(b => b.type === "airport").forEach(b => {
+    if (!places.some(p => p.name.toLowerCase() === b.name.toLowerCase())) places.push(b);
+  });
+  store.set("shipeta.airfieldsSeeded", true);
+  savePlaces();
+}
+function savePlaces() { store.set("shipeta.places", places); }
+const isField = p => p.type === "airport";
 
-let editing = -1;   // index being edited on the Destinations tab, -1 = adding
+let editing = -1;   // index being edited on the Places tab, -1 = adding
 
 /* ================= inputs ================= */
 const $ = id => document.getElementById(id);
@@ -674,7 +727,7 @@ function saveInputs() {
   const out = { assetOpen: $("assetPanel").open };
   FIELDS.forEach(f => out[f] = $(f).value);
   out.dest = $("destSel").value;
-  out.base = $("baseSel").value;
+  out.air = $("airSel").value;
   out.trackTo = trackTo;
   store.set("shipeta.inputs", out);
 }
@@ -695,20 +748,21 @@ function rings() {
 
 function renderDestSelects() {
   const saved = store.get("shipeta.inputs", {});
-  [["destSel", saved.dest], ["baseSel", saved.base]].forEach(([id, want]) => {
+  [["destSel", saved.dest, false], ["airSel", saved.air, true]].forEach(([id, want, fields]) => {
     const sel = $(id);
     const keep = sel.value || want;
     sel.innerHTML = "";
-    if (id === "baseSel") {
+    places.forEach((p, i) => {
+      if (isField(p) !== fields) return;
       const o = document.createElement("option");
-      o.value = "__same"; o.textContent = "Same as the destination";
-      sel.appendChild(o);
-    }
-    dests.forEach((d, i) => {
-      const o = document.createElement("option");
-      o.value = String(i); o.textContent = d.name;
+      o.value = String(i); o.textContent = p.name;
       sel.appendChild(o);
     });
+    if (!sel.options.length) {
+      const o = document.createElement("option");
+      o.value = ""; o.textContent = fields ? "no airfields saved" : "no ports saved";
+      sel.appendChild(o);
+    }
     if (keep != null && sel.querySelector('option[value="' + CSS.escape(keep) + '"]')) sel.value = keep;
   });
 }
@@ -717,13 +771,14 @@ function renderDestSelects() {
 let model = null;   // everything the results, the track and the brief are drawn from
 
 function compute() {
-  const dest = dests[parseInt($("destSel").value, 10)] || null;
+  const dest = places[parseInt($("destSel").value, 10)] || null;
+  const air = places[parseInt($("airSel").value, 10)] || null;
   const ship = parseCoords($("inPos").value);
   const speed = num("inSpeed");
   const age = Math.max(0, num("inAge") || 0);
 
   const notes = [];
-  if (!dest) { model = null; return; }
+  if (!dest || !air) { model = null; return; }
   if (!ship) { model = null; return; }
 
   /* Where she's actually steaming. Straight at the destination unless a track
@@ -746,27 +801,28 @@ function compute() {
     now.lat = p.lat; now.lon = p.lon;
   }
 
-  const dist = distanceNm(now, dest);        // straight line to the port, right now
+  const dist = distanceNm(now, dest);        // to the port she's heading for
   const brg = bearingDeg(now, dest);
+  const distAir = distanceNm(now, air);      // and to the airfield we fly from
   const trackBrg = bearingDeg(now, target);
   const trackLen = Math.max(distanceNm(now, target), 0.0001);
   const t0 = Date.now();
 
-  /* How far off the port she is, s miles along her track. Heading straight at
-     it that's just dist - s; passing by, it falls to a closest approach and
-     climbs again — which is the curve the rings have to be solved against. */
-  const offPort = s => distanceNm(along(now, trackBrg, s), dest);
+  /* How far off the AIRFIELD she is, s miles along her track. That's what the
+     rings are about: whether we can reach her, not where she's going. The
+     curve falls to a closest approach and climbs again. */
+  const offField = s => distanceNm(along(now, trackBrg, s), air);
   const hrs = s => speed > 0 ? s / speed : null;
   const point = s => ({ s, hours: hrs(s), at: along(now, trackBrg, s) });
 
-  // Closest point of approach: the bottom of that curve.
+  // Closest point of approach to the airfield: the bottom of that curve.
   let lo = 0, hi = trackLen;
   for (let i = 0; i < 60; i++) {
     const a = lo + (hi - lo) / 3, b = hi - (hi - lo) / 3;
-    if (offPort(a) < offPort(b)) hi = b; else lo = a;
+    if (offField(a) < offField(b)) hi = b; else lo = a;
   }
   const cpa = point((lo + hi) / 2);
-  cpa.nm = offPort(cpa.s);
+  cpa.nm = offField(cpa.s);
 
   // Where her track cuts a ring: on the way in before the closest approach,
   // on the way out after it.
@@ -774,14 +830,14 @@ function compute() {
     let a = from, b = to;
     for (let i = 0; i < 60; i++) {
       const m = (a + b) / 2;
-      if ((offPort(a) - r) * (offPort(m) - r) <= 0) b = m; else a = m;
+      if ((offField(a) - r) * (offField(m) - r) <= 0) b = m; else a = m;
     }
     return point((a + b) / 2);
   };
 
-  const endsInside = r => offPort(trackLen) <= r;
+  const endsInside = r => offField(trackLen) <= r;
   const legs = rings().map(r => {
-    const insideNow = dist <= r;
+    const insideNow = distAir <= r;
     const misses = cpa.nm > r;
     return {
       ring: r, name: r + " nm ring",
@@ -803,19 +859,16 @@ function compute() {
   if (dist > 3000) notes.push(["warn", "That's " + Math.round(dist) +
     " nm from " + dest.name + " — worth re-reading the coordinates."]);
   if (transiting) notes.push(["good", "Her track is set from the map: she passes " +
-    dest.name + " at " + cpa.nm.toFixed(1) + " nm rather than coming in. Times below " +
-    "are for that track."]);
+    dest.name + " rather than coming in. Times below are for that track."]);
 
-  // Optional flying leg. You meet her where her track first cuts the ring.
+  // Optional flying leg, out of the departure airfield.
   const aSpeed = num("inAsset");
   let asset = null;
   if (aSpeed && aSpeed > 0) {
-    const baseVal = $("baseSel").value;
-    const base = baseVal === "__same" ? dest : (dests[parseInt(baseVal, 10)] || dest);
     asset = {
-      base, speed: aSpeed,
+      base: air, speed: aSpeed,
       legs: legs.filter(l => l.entry).map(l => {
-        const outbound = distanceNm(base, l.entry.at);
+        const outbound = distanceNm(air, l.entry.at);
         const flyH = outbound / aSpeed;
         return {
           name: l.ring + " nm ring",
@@ -827,8 +880,8 @@ function compute() {
     };
   }
 
-  model = { dest, reported, now, moved, age, dist, distAtReport, brg, speed, legs, notes,
-            asset, t0, transiting, target, trackBrg, trackLen, cpa, arrival };
+  model = { dest, air, reported, now, moved, age, dist, distAir, distAtReport, brg, speed,
+            legs, notes, asset, t0, transiting, target, trackBrg, trackLen, cpa, arrival };
 }
 
 const pad3 = v => String(Math.round(v) % 360).padStart(3, "0");
@@ -847,8 +900,10 @@ function renderResults() {
   const box = $("results");
 
   // Echo what we read back, so a mistyped digit is obvious before it's used.
-  const dest = dests[parseInt($("destSel").value, 10)];
-  $("destEcho").textContent = dest ? fmtDDM(dest) + (dest.note ? "  · " + dest.note : "") : "";
+  const dest = places[parseInt($("destSel").value, 10)];
+  $("destEcho").textContent = dest ? fmtDDM(dest) + (dest.note ? "  \u00B7 " + dest.note : "") : "";
+  const air = places[parseInt($("airSel").value, 10)];
+  $("airEcho").textContent = air ? fmtDDM(air) + (air.note ? "  \u00B7 " + air.note : "") : "";
 
   const ship = parseCoords($("inPos").value);
   const posEcho = $("posEcho");
@@ -907,7 +962,7 @@ function renderResults() {
   }
   html.push("</div>");
 
-  html.push('<section class="panel"><h2>Ranges</h2>');
+  html.push('<section class="panel"><h2>Ranges from ' + esc(model.air.name) + "</h2>");
 
   const line = (k, v, cls) =>
     '<div class="at"><span style="color:var(--ink-dim);min-width:4.6em;display:inline-block">' +
@@ -925,7 +980,7 @@ function renderResults() {
     if (l.misses) {
       html.push('<div class="figs"><div class="eta" style="color:var(--amber);font-size:1.05rem">' +
         "Never comes inside</div><div class=\"dist\">closest " + model.cpa.nm.toFixed(1) +
-        " nm</div></div>");
+        " nm off " + esc(model.air.name) + "</div></div>");
     } else {
       html.push('<div class="figs">');
       if (l.entry) {
@@ -968,7 +1023,7 @@ function renderResults() {
     html.push("</div>");
     html.push(posLine(model.arrival));
   } else {
-    html.push('<div class="name">Closest to <b>' + esc(model.dest.name) + "</b></div>");
+    html.push('<div class="name">Closest to <b>' + esc(model.air.name) + "</b></div>");
     html.push('<div class="figs">');
     html.push('<div class="eta">' + (model.cpa.hours == null ? "\u2014"
       : fmtClock(at(model.cpa.hours), true)) + "</div>");
@@ -979,6 +1034,13 @@ function renderResults() {
     html.push(posLine(model.cpa));
   }
   html.push("</div>");
+
+  // How far off the airfield she is right now, whatever else is going on.
+  html.push('<div class="leg"><div class="name">Off <b>' + esc(model.air.name) +
+    "</b> right now</div>");
+  html.push('<div class="figs"><div class="run">' + model.distAir.toFixed(1) +
+    " nm</div><div class=\"dist\">bearing " + pad3(bearingDeg(model.now, model.air)) +
+    "\u00B0 from her</div></div></div>");
   html.push("</section>");
 
   html.push('<section class="panel"><h2>Check</h2>');
@@ -1235,11 +1297,12 @@ function drawMap(fit) {
   if (!model) return;
 
   const dest = [model.dest.lat, model.dest.lon];
+  const air = [model.air.lat, model.air.lon];
   const now = [model.now.lat, model.now.lon];
 
   // Range rings, as circles on the ground around the destination.
   model.legs.forEach(l => {
-    L.circle(dest, {
+    L.circle(air, {
       radius: l.ring * 1852, color: "#38c8e8", weight: 1.5,
       opacity: l.misses ? 0.3 : 0.75, fill: false,
       dashArray: (l.insideNow || l.misses) ? "4 6" : null
@@ -1257,7 +1320,7 @@ function drawMap(fit) {
 
   // How close she actually gets, when she's only passing.
   if (model.transiting) {
-    L.polyline([[model.cpa.at.lat, model.cpa.at.lon], [model.dest.lat, model.dest.lon]],
+    L.polyline([[model.cpa.at.lat, model.cpa.at.lon], [model.air.lat, model.air.lon]],
       { color: "#6d8ba0", weight: 1, opacity: 0.6, dashArray: "2 5" }).addTo(overlay);
     L.marker([model.cpa.at.lat, model.cpa.at.lon], {
       icon: L.divIcon({ className: "", html: '<i class="pin pin-cross"></i>', iconSize: [11, 11] }),
@@ -1296,20 +1359,19 @@ function drawMap(fit) {
   // Destination, and the airfield when it's somewhere else.
   const destLabel = model.dest.name + "<br>" + model.dist.toFixed(1) + " nm" +
     (model.arrival && model.arrival.hours != null
-      ? " \u00B7 " + fmtClock(at(model.arrival.hours), true)
-      : model.cpa.hours == null ? ""
-      : "<br>closest " + model.cpa.nm.toFixed(1) + " nm " + fmtClock(at(model.cpa.hours), true));
+      ? " \u00B7 " + fmtClock(at(model.arrival.hours), true) : "");
   labelled(L.marker(dest, {
     icon: L.divIcon({ className: "", html: '<i class="pin pin-dest"></i>', iconSize: [16, 16] }),
     interactive: false
   }), destLabel, false, "bottom", 1).addTo(overlay);
 
-  if (model.asset && model.asset.base !== model.dest) {
-    labelled(L.marker([model.asset.base.lat, model.asset.base.lon], {
-      icon: L.divIcon({ className: "", html: '<i class="pin pin-base"></i>', iconSize: [14, 14] }),
-      interactive: false
-    }), model.asset.base.name, true, "right", 4).addTo(overlay);
-  }
+  const airLabel = model.air.name + "<br>" + model.distAir.toFixed(1) + " nm off her" +
+    (model.cpa.hours == null ? ""
+      : "<br>closest " + model.cpa.nm.toFixed(1) + " nm " + fmtClock(at(model.cpa.hours), true));
+  labelled(L.marker(air, {
+    icon: L.divIcon({ className: "", html: '<i class="pin pin-base"></i>', iconSize: [14, 14] }),
+    interactive: false
+  }), airLabel, false, "top", 1).addTo(overlay);
 
   // The ship herself — draggable, which is the quickest way to correct her.
   /* The hull points down her track, and the 30px box around it is what your
@@ -1346,9 +1408,9 @@ function fitMap() {
   if (!map || !model) return;
   const b = L.latLngBounds([[model.now.lat, model.now.lon],
                             [model.dest.lat, model.dest.lon]]);
+  b.extend([model.air.lat, model.air.lon]);
   const widest = model.legs.reduce((m, l) => Math.max(m, l.ring), 0);
-  if (widest) b.extend(L.latLng(model.dest.lat, model.dest.lon).toBounds(widest * 2 * 1852));
-  if (model.asset) b.extend([model.asset.base.lat, model.asset.base.lon]);
+  if (widest) b.extend(L.latLng(model.air.lat, model.air.lon).toBounds(widest * 2 * 1852));
   if (model.transiting) b.extend([model.target.lat, model.target.lon]);
   // Room on the right for the destination's label, rather than clipping it.
   map.fitBounds(b, { paddingTopLeft: [70, 44], paddingBottomRight: [90, 50] });
@@ -1363,13 +1425,14 @@ function renderMapSummary() {
       "Enter the ship's position, or tap the map</div></div>";
     return;
   }
-  const cells = [["To the port", model.dist.toFixed(1) + " nm", true],
-                 ["Bearing", pad3(model.brg) + "\u00B0", false]];
+  const cells = [["To the port", model.dist.toFixed(1) + " nm", true]];
   cells.push(model.arrival
     ? ["Alongside", model.arrival.hours == null ? "\u2014"
         : fmtClock(at(model.arrival.hours), true), true]
-    : ["Closest", model.cpa.nm.toFixed(1) + " nm \u00B7 " +
-        (model.cpa.hours == null ? "\u2014" : fmtClock(at(model.cpa.hours), true)), true]);
+    : ["Bearing", pad3(model.brg) + "\u00B0", false]);
+  cells.push(["Off " + model.air.name.split(" ")[0], model.distAir.toFixed(1) + " nm", true]);
+  cells.push(["Closest", model.cpa.nm.toFixed(1) + " nm \u00B7 " +
+    (model.cpa.hours == null ? "\u2014" : fmtClock(at(model.cpa.hours), true)), true]);
   model.legs.forEach(l => {
     cells.push([l.ring + " nm ring",
       l.misses ? "never" : l.insideNow ? "inside"
@@ -1389,6 +1452,8 @@ function briefText() {
   L.push("Vessel   " + fmtDDM(model.now) +
     (model.moved > 0 ? "  (from a position " + fmtRun(model.age / 60) + " old)" : ""));
   L.push("Dest     " + model.dest.name + "  " + fmtDDM(model.dest));
+  L.push("Rings    from " + model.air.name + "  " + fmtDDM(model.air) +
+    "  (" + model.distAir.toFixed(1) + " nm off her now)");
   L.push("Run in   " + model.dist.toFixed(1) + " nm, bearing " + pad3(model.brg) + "°" +
     (model.speed > 0 ? ", " + model.speed.toFixed(1) + " kt" : ""));
   if (model.transiting) {
@@ -1409,7 +1474,7 @@ function briefText() {
         : fmtClock(at(model.arrival.hours), true) + "  " + fmtRun(model.arrival.hours),
       model.arrival.togo.toFixed(1) + " nm", fmtDDM(model.arrival.at)]);
   } else {
-    rows.push(["closest to " + model.dest.name,
+    rows.push(["closest to " + model.air.name,
       model.cpa.hours == null ? "no speed" : fmtClock(at(model.cpa.hours), true),
       model.cpa.nm.toFixed(1) + " nm off", fmtDDM(model.cpa.at)]);
   }
@@ -1462,29 +1527,31 @@ async function copyText(text, btn, label) {
 
 /* ================= destinations tab ================= */
 function renderDestList() {
-  const box = $("destList");
-  if (!dests.length) {
-    box.innerHTML = '<div class="empty">Nothing saved yet.</div>';
-    return;
-  }
-  box.innerHTML = dests.map((d, i) =>
+  const card = (p, i) =>
     '<div class="dest"><div class="top"><div>' +
-      '<div class="nm">' + esc(d.name) + "</div>" +
-      '<div class="co mono">' + fmtDDM(d) + "</div>" +
-      (d.note ? '<div class="note">' + esc(d.note) + "</div>" : "") +
+      '<div class="nm">' + esc(p.name) + "</div>" +
+      '<div class="co mono">' + fmtDDM(p) + "</div>" +
+      (p.note ? '<div class="note">' + esc(p.note) + "</div>" : "") +
     '</div><div class="acts">' +
       '<button type="button" data-edit="' + i + '">Edit</button>' +
       '<button type="button" class="del" data-del="' + i + '">Delete</button>' +
-    "</div></div></div>").join("");
+    "</div></div></div>";
+  const fill = (id, want) => {
+    const rows = places.map((p, i) => isField(p) === want ? card(p, i) : "").join("");
+    $(id).innerHTML = rows || '<div class="empty">Nothing saved yet.</div>';
+  };
+  fill("portList", false);
+  fill("fieldList", true);
 }
 
 function startEdit(i) {
   editing = i;
-  const d = dests[i];
-  $("destFormTitle").textContent = "Edit destination";
-  $("dName").value = d.name;
-  $("dPos").value = fmtDDM(d);
-  $("dNote").value = d.note || "";
+  const p = places[i];
+  $("destFormTitle").textContent = "Edit " + (isField(p) ? "airfield" : "port");
+  $("dType").value = isField(p) ? "airport" : "port";
+  $("dName").value = p.name;
+  $("dPos").value = fmtDDM(p);
+  $("dNote").value = p.note || "";
   $("dPosEcho").textContent = "";
   $("dName").focus();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1492,9 +1559,10 @@ function startEdit(i) {
 
 function resetForm() {
   editing = -1;
-  $("destFormTitle").textContent = "Add a destination";
+  $("destFormTitle").textContent = "Add a place";
+  $("dType").value = "port";
   $("dName").value = ""; $("dPos").value = ""; $("dNote").value = "";
-  $("dPosEcho").className = "hint"; $("dPosEcho").textContent = "";
+  $("dPosEcho").className = "hint"; $("dPosEcho").innerHTML = "";
   $("dPos").classList.remove("bad");
 }
 
@@ -1509,9 +1577,10 @@ function saveDest() {
     $("dPos").classList.add("bad");
     return;
   }
-  const rec = { name, lat: pos.lat, lon: pos.lon, note: $("dNote").value.trim() };
-  if (editing >= 0) dests[editing] = rec; else dests.push(rec);
-  saveDests();
+  const rec = { type: $("dType").value === "airport" ? "airport" : "port",
+                name, lat: pos.lat, lon: pos.lon, note: $("dNote").value.trim() };
+  if (editing >= 0) places[editing] = rec; else places.push(rec);
+  savePlaces();
   resetForm();
   renderDestList();
   renderDestSelects();
@@ -1543,7 +1612,7 @@ $("pageTabs").addEventListener("click", e => {
 
 ["inPos", "inSpeed", "inAge", "inRings", "inAsset"].forEach(id =>
   $(id).addEventListener("input", () => { saveInputs(); render(); }));
-["destSel", "baseSel"].forEach(id =>
+["destSel", "airSel"].forEach(id =>
   $(id).addEventListener("change", () => { saveInputs(); render(); }));
 $("assetPanel").addEventListener("toggle", saveInputs);
 
@@ -1576,23 +1645,23 @@ $("dPos").addEventListener("input", () => {
   else if (p) { echo.className = "hint good"; echo.innerHTML = fmtAll(p); $("dPos").classList.remove("bad"); }
   else { echo.className = "hint bad"; echo.textContent = "Can't read that yet."; $("dPos").classList.add("bad"); }
 });
-$("destList").addEventListener("click", e => {
+["portList", "fieldList"].forEach(id => $(id).addEventListener("click", e => {
   const ed = e.target.closest("[data-edit]"), del = e.target.closest("[data-del]");
   if (ed) startEdit(parseInt(ed.dataset.edit, 10));
   if (del) {
     const i = parseInt(del.dataset.del, 10);
-    if (!confirm("Delete " + dests[i].name + "?")) return;
-    dests.splice(i, 1);
+    if (!confirm("Delete " + places[i].name + "?")) return;
+    places.splice(i, 1);
     if (editing === i) resetForm();
-    saveDests(); renderDestList(); renderDestSelects(); render();
+    savePlaces(); renderDestList(); renderDestSelects(); render();
   }
-});
+}));
 $("dRestore").addEventListener("click", () => {
   if (!confirm("Put the built-in ports back? Anything you've added stays.")) return;
   BUILT_IN.forEach(b => {
-    if (!dests.some(d => d.name.toLowerCase() === b.name.toLowerCase())) dests.push(b);
+    if (!places.some(p => p.name.toLowerCase() === b.name.toLowerCase())) places.push(b);
   });
-  saveDests(); renderDestList(); renderDestSelects(); render();
+  savePlaces(); renderDestList(); renderDestSelects(); render();
 });
 
 window.addEventListener("resize", drawTrack);
