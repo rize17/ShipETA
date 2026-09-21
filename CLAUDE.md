@@ -76,6 +76,20 @@ package manager.
 - **The rings field takes no `inputmode`.** A numeric keypad on a phone has no
   comma, so a field holding "100, 80" can be emptied and then never refilled.
   Any field whose value is a list needs the full keyboard.
+- **The course steers nothing.** `model.course` is inert by design: it draws
+  the dotted ray ahead of her and decides the Check panel's verdict, and
+  touches no distance, no ETA and no ring crossing. It exists to expose a
+  disagreement between where she's pointed and where the reckoning assumes
+  she's going — wiring it into the track would hide the very thing it's for.
+  The course was removed once before, in v1.3, because it implied the app
+  could follow a ship that wasn't steaming straight; it's back only as a
+  check, and it must stay one. Dead reckoning still runs along the track.
+
+- **Bearings are compared the short way round.** `offBy()` folds the
+  difference into 0–180, so 350° and 010° are 20° apart, not 340°. The
+  ray is green within 10°, amber to 30°, red beyond — so a screenshot
+  carries the verdict without anyone reading the numbers.
+
 - **The ship is met on a range ring, nowhere else.** Rings default to 100 and
   80 nm — the outer limit and the range normally flown. Don't reintroduce a
   "meet her wherever the arithmetic lands" figure; it offers something that

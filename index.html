@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.3</title>
+<title>Ship ETA v4.4</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -466,7 +466,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.3</span></h1>
+  <h1>Ship ETA<span class="version">v4.4</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -502,8 +502,19 @@
     <div class="hint" id="posEcho">Type it however MarineTraffic shows it — degrees,
       degrees and minutes, or minutes and seconds, with or without the symbols.</div>
 
-    <label for="inSpeed">Average speed (kt)</label>
-    <input id="inSpeed" inputmode="decimal" placeholder="12.5">
+    <div class="grid2">
+      <div>
+        <label for="inSpeed">Average speed (kt)</label>
+        <input id="inSpeed" inputmode="decimal" placeholder="12.5">
+      </div>
+      <div>
+        <label for="inCourse">Course (optional)</label>
+        <input id="inCourse" inputmode="decimal" placeholder="288">
+      </div>
+    </div>
+    <div class="hint">MarineTraffic gives both together, as <b>12.8kn / 288°</b>. The
+      course changes no figure here — it draws a dotted line ahead of her on the map and
+      says below whether she’s actually pointed where these times assume.</div>
 
     <label for="inTaken">Taken at <span id="takenZone" class="zone"></span></label>
     <div class="taken-row">
@@ -927,7 +938,7 @@ let editing = -1;   // index being edited on the Places tab, -1 = adding
 
 /* ================= inputs ================= */
 const $ = id => document.getElementById(id);
-const FIELDS = ["inName", "inPos", "inSpeed", "inRings", "inAsset"];
+const FIELDS = ["inName", "inPos", "inSpeed", "inCourse", "inRings", "inAsset"];
 
 /* When the position was reported, as an instant rather than an age in minutes.
    An age is only true at the moment it's typed; come back to the job half an
@@ -1030,6 +1041,13 @@ function compute() {
   const dest = places[parseInt($("destSel").value, 10)] || null;
   const ship = parseCoords($("inPos").value);
   const speed = num("inSpeed");
+  /* Her reported course. Deliberately inert: it steers nothing, because the
+     whole point is to show up a disagreement between where she's pointed and
+     where this reckoning assumes she's going. Making it drive the track would
+     hide exactly the thing it's here to reveal. */
+  let course = num("inCourse");
+  if (course != null && (!isFinite(course) || course < 0 || course > 360)) course = null;
+  if (course != null) course = ((course % 360) + 360) % 360;
   const age = ageMinutes();
   const name = $("inName").value.trim();
 
@@ -1170,6 +1188,8 @@ function compute() {
   if (takenAt != null && takenAt > Date.now() + 60000)
     notes.push(["warn", "That position time is in the future \u2014 check it, and whether " +
       "you meant " + (useUTC ? "local time" : "UTC") + "."]);
+  if (num("inCourse") != null && course == null)
+    notes.push(["warn", "A course is 000 to 360 degrees — that one's been ignored."]);
   if (ship.lat > 0) notes.push(["warn", "That latitude is north of the equator. " +
     "If you meant southern Africa it wants an S."]);
   if (dist > 3000) notes.push(["warn", "That's " + Math.round(dist) +
@@ -1188,13 +1208,16 @@ function compute() {
   const fieldsShown = fields.filter(f => f.shown);
   const inRangeShown = inRange.filter(f => f.shown);
 
-  model = { name, dest, reported, now, moved, age, dist, distAtReport, brg, speed, aSpeed,
+  model = { name, dest, reported, now, moved, age, dist, distAtReport, brg, speed, aSpeed, course,
             notes, t0, transiting, target, trackBrg, trackLen, arrival, fromNow,
             vertices, segs, runS, total,
             fields, inRange, outOfRange, ringList, fieldsShown, inRangeShown };
 }
 
 const pad3 = v => String(Math.round(v) % 360).padStart(3, "0");
+/* Separation between two bearings the short way round, so 350 and 010 are
+   20 apart rather than 340. */
+const offBy = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
 const at = h => new Date(model.t0 + h * 3600000);
 
 /* ================= rendering ================= */
@@ -1341,10 +1364,28 @@ function renderResults() {
 
   html.push('<section class="panel"><h2>Check</h2>');
   model.notes.forEach(([k, t]) => html.push('<div class="hint ' + k + '">' + esc(t) + "</div>"));
-  html.push('<div class="hint">She bears ' + pad3(model.brg) + "° to " +
-    esc(model.dest.name) + ". If that isn\u2019t roughly the course she\u2019s making, " +
-    "she isn\u2019t steaming straight there and none of this holds \u2014 measure it " +
-    "on the chart instead.</div>");
+  if (model.course == null) {
+    html.push('<div class="hint">She bears ' + pad3(model.brg) + "° to " +
+      esc(model.dest.name) + ". If that isn\u2019t roughly the course she\u2019s making, " +
+      "she isn\u2019t steaming straight there and none of this holds \u2014 measure it " +
+      "on the chart instead.</div>");
+  } else {
+    /* With a course to hand the app can settle this itself rather than asking
+       the operator to eyeball two numbers. */
+    const off = offBy(model.course, model.trackBrg);
+    html.push('<div class="hint ' + (off <= 10 ? "good" : off <= 30 ? "warn" : "bad") +
+      '">She\u2019s making ' + pad3(model.course) + "°; her track wants " +
+      pad3(model.trackBrg) + "° \u2014 " +
+      (off < 1 ? "dead on" : Math.round(off) + "° off") + ". " +
+      (off <= 10
+        ? "She\u2019s pointed where these figures assume."
+        : off <= 30
+          ? "She isn\u2019t steaming quite straight there, so treat the times as the best "
+            + "she could do."
+          : "She is not steaming towards " + esc(model.dest.name) +
+            ". None of this holds \u2014 set turning points on the map to follow her real "
+            + "route, or measure it on the chart.") + "</div>");
+  }
   html.push("</section>");
 
   box.innerHTML = html.join("");
@@ -1407,7 +1448,10 @@ function noteMap(text, kind) {
   el.className = "hint" + (kind ? " " + kind : "");
   el.textContent = text || (trackTo
     ? "Track set by hand. Drag the open end again, or put it back to the port."
-    : "Aqua rings she reaches, violet she doesn't. Drag the open end of her track.");
+    : "Aqua rings she reaches, violet she doesn't. Drag the open end of her track." +
+      (model && model.course != null
+        ? " The dotted line ahead of her is the course you entered."
+        : ""));
 }
 
 /* She steams towards whatever this is, and the rings stay where they are:
@@ -1595,6 +1639,23 @@ function drawMap(fit) {
     }).addTo(overlay).bindTooltip("reported " + fmtRun(model.age / 60) + " ago",
       { direction: "left", className: "lbl dim" });
   }
+  /* Her reported course, thrown forward from where she is now. Dotted and
+     open-ended because it is a heading, not a passage: nothing about it says
+     where she will be. Coloured by how far it departs from the track, so a
+     screenshot carries the verdict - green agrees, red means the figures
+     above describe a voyage she isn't making. Capped in length so it stays a
+     direction indicator rather than dominating the map; Fit ignores it. */
+  if (model.course != null) {
+    const coff = offBy(model.course, model.trackBrg);
+    const tip = along({ lat: now[0], lon: now[1] }, model.course,
+                      Math.min(Math.max(model.trackLen * 0.5, 40), 150));
+    const ray = [now, [tip.lat, tip.lon]];
+    L.polyline(ray, { color: "#04121a", weight: 5, opacity: 0.45,
+                      dashArray: "2 8" }).addTo(overlay);
+    L.polyline(ray, { color: coff <= 10 ? "#4fd08a" : coff <= 30 ? "#e8b638" : "#e86a5e",
+                      weight: 2.2, opacity: 0.95, dashArray: "2 8" }).addTo(overlay);
+  }
+
 
   /* Every ring she cuts, marked on her track and labelled with how far she
      runs to get there and when — the figures read off the line itself. The
@@ -1967,7 +2028,7 @@ $("pageTabs").addEventListener("click", e => {
   if (b) showPage(b.dataset.page);
 });
 
-["inName", "inPos", "inSpeed", "inRings", "inAsset"].forEach(id =>
+["inName", "inPos", "inSpeed", "inCourse", "inRings", "inAsset"].forEach(id =>
   $(id).addEventListener("input", () => { saveInputs(); render(); }));
 
 $("inTaken").addEventListener("input", () => { takenFromField(); saveInputs(); render(); });
