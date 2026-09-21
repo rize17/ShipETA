@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v3.3</title>
+<title>Ship ETA v3.4</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -363,7 +363,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v3.3</span></h1>
+  <h1>Ship ETA<span class="version">v3.4</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -1186,11 +1186,8 @@ function noteMap(text, kind) {
   const el = $("mapNote");
   el.className = "hint" + (kind ? " " + kind : "");
   el.textContent = text || (trackTo
-    ? "Her track is set by hand \u2014 she passes the port rather than coming in. " +
-      "Drag the open end again to adjust it, or put it back to the port."
-    : "Aqua rings are airfields she comes into range of; violet ones she never does. " +
-      "Drag the open end of her track to where she's actually heading, for when she's " +
-      "passing rather than coming in \u2014 her position comes off the Calculate tab.");
+    ? "Track set by hand. Drag the open end again, or put it back to the port."
+    : "Aqua rings she reaches, violet she doesn't. Drag the open end of her track.");
 }
 
 /* She steams towards whatever this is, and the rings stay where they are:
@@ -1424,13 +1421,24 @@ function drawMap(fit) {
 function fitMap(all) {
   if (!map || !model) return;
   const b = L.latLngBounds([[model.now.lat, model.now.lon],
-                            [model.dest.lat, model.dest.lon]]);
-  if (model.transiting) b.extend([model.target.lat, model.target.lon]);
-  const widest = model.ringList.length ? model.ringList[0] : 0;
-  (all ? model.fields : model.inRange).forEach(f => {
-    b.extend(widest ? L.latLng(f.place.lat, f.place.lon).toBounds(widest * 2 * 1852)
-                    : L.latLngBounds([[f.place.lat, f.place.lon], [f.place.lat, f.place.lon]]));
-  });
+                            [model.target.lat, model.target.lon]]);
+  if (all) {
+    // The whole coast: every airfield and the full width of its rings.
+    const widest = model.ringList.length ? model.ringList[0] : 0;
+    model.fields.forEach(f => {
+      b.extend(widest ? L.latLng(f.place.lat, f.place.lon).toBounds(widest * 2 * 1852)
+                      : L.latLngBounds([[f.place.lat, f.place.lon], [f.place.lat, f.place.lon]]));
+    });
+  } else {
+    /* The job: her track end to end and every ring she cuts along it. Framing
+       whole rings instead pushed the track into a huddle in the middle with
+       its labels on top of one another. */
+    b.extend([model.dest.lat, model.dest.lon]);
+    model.inRange.forEach(f => f.legs.forEach(l => {
+      if (l.entry) b.extend([l.entry.at.lat, l.entry.at.lon]);
+      if (l.exit) b.extend([l.exit.at.lat, l.exit.at.lon]);
+    }));
+  }
   /* Padding in proportion to the map, not a fixed 160px that swallowed nearly
      half of a phone's width and cost a whole zoom level. Labels that still
      don't fit are dropped by declutter(), so this only has to be generous
@@ -1449,19 +1457,22 @@ function renderMapSummary() {
       "Enter the ship's position on the Calculate tab</div></div>";
     return;
   }
-  const cells = [["To the port", model.dist.toFixed(1) + " nm", true]];
-  cells.push(model.arrival
-    ? ["Alongside", model.arrival.hours == null ? "\u2014"
-        : fmtClock(at(model.arrival.hours), true), true]
-    : ["Bearing", pad3(model.brg) + "\u00B0", false]);
-  const first = model.inRange[0];
-  cells.push(first
-    ? ["First in range", first.code + " " + (first.firstHours == null ? "\u2014"
-        : first.firstHours === 0 ? "now" : fmtClock(at(first.firstHours), true)), true]
-    : ["In range", "none", false]);
-  model.inRange.slice(0, 3).forEach(f => {
-    cells.push([f.code + " closest", f.cpa.nm.toFixed(0) + " nm", true]);
-  });
+  /* What happens along her track, in the order it happens — the same figures
+     as the labels on the line, for whichever of them the map is too busy to
+     show. */
+  const cells = [["End of track", model.trackLen.toFixed(1) + " nm" +
+    (model.speed > 0 ? " \u00B7 " + fmtClock(at(model.trackLen / model.speed), true) : ""), true]];
+
+  const next = [];
+  model.inRange.forEach(f => f.legs.forEach(l => {
+    if (l.entry) next.push({ k: f.code + " " + l.ring, s: l.entry.s, h: l.entry.hours });
+    else if (l.insideNow) next.push({ k: f.code + " " + l.ring, s: 0, h: 0 });
+  }));
+  next.sort((a, b2) => a.s - b2.s);
+  if (!next.length) cells.push(["Rings", "none on this track", false]);
+  next.slice(0, 5).forEach(n => cells.push([n.k,
+    n.s === 0 ? "inside now"
+      : n.s.toFixed(1) + " nm" + (n.h == null ? "" : " \u00B7 " + fmtClock(at(n.h), true)), true]));
   box.innerHTML = cells.map(([k, v, a]) =>
     '<div class="cell"><div class="k">' + esc(k) + '</div><div class="v' +
     (a ? " aqua" : "") + '">' + esc(v) + "</div></div>").join("");
