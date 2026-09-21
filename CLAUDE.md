@@ -195,6 +195,11 @@ herself, and it's the quickest way to both check a position and set one.
   half off the edge, which you pan to. A label that moves itself to stay
   readable is harder to follow than one that stays put, and the same figure is
   in the strip under the map regardless.
+- **`dist` is never shown anywhere.** The straight line from her to the port
+  is kept in the model because bearings and sanity checks want it, but every
+  distance on screen and in the brief is `trackLen` — the run to the end of her
+  track, round the turning points. Showing the straight line is how the map
+  came to claim 157 nm for a 186 nm passage over a peninsula.
 - **Only one run-in figure exists on the map, and it's on the end of the
   track.** The destination marker carries its name alone. A distance there
   would be the straight line to it — the very line the turning points exist to

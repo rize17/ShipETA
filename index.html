@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v3.10</title>
+<title>Ship ETA v3.11</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -398,7 +398,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v3.10</span></h1>
+  <h1>Ship ETA<span class="version">v3.11</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -1140,18 +1140,25 @@ function renderResults() {
 
   const html = [];
 
-  // Headline: how far off the port she is, and what happens next.
+  /* Headline: the run to the end of her track. Round the turning points, not
+     the straight line they exist to avoid, and to wherever the track actually
+     ends rather than to a port she may only be passing. */
+  const endH = model.speed > 0 ? model.trackLen / model.speed : null;
   html.push('<div class="headline">');
-  html.push('<div class="k">Distance to ' + esc(model.dest.name) + "</div>");
-  html.push('<div class="big">' +
-    (model.arrival ? model.arrival.togo : model.dist).toFixed(1) + "<small>nm</small></div>");
-  if (model.arrival && model.arrival.hours != null) {
-    html.push('<div class="sub">Alongside <b>' + fmtClock(at(model.arrival.hours), true) +
-      "</b> \u00B7 " + fmtRun(model.arrival.hours) + " at " + model.speed.toFixed(1) + " kt</div>");
-  } else if (model.transiting) {
-    html.push('<div class="sub">Passing \u2014 bearing ' + pad3(model.brg) + "\u00B0</div>");
+  html.push('<div class="k">' +
+    (model.transiting ? "To the end of her track" : "To " + esc(model.dest.name)) + "</div>");
+  html.push('<div class="big">' + model.trackLen.toFixed(1) + "<small>nm</small></div>");
+  if (endH != null) {
+    html.push('<div class="sub">' + (model.transiting ? "There " : "Alongside ") +
+      "<b>" + fmtClock(at(endH), true) + "</b> \u00B7 " + fmtRun(endH) +
+      " at " + model.speed.toFixed(1) + " kt</div>");
   } else {
     html.push('<div class="sub">Bearing ' + pad3(model.brg) + "\u00B0 \u2014 add a speed for times</div>");
+  }
+  if (wayPts.length) {
+    html.push('<div class="sub" style="font-size:0.7rem;color:var(--ink-dim)">round ' +
+      wayPts.length + (wayPts.length === 1 ? " turning point" : " turning points") +
+      " \u00B7 " + distanceNm(model.now, model.target).toFixed(1) + " nm straight</div>");
   }
   html.push("</div>");
 
@@ -1677,7 +1684,10 @@ function briefText() {
     (model.moved > 0 ? "  (from a position " + fmtRun(model.age / 60) + " old)" : ""));
   L.push("Dest     " + model.dest.name + "  " + fmtDDM(model.dest));
 
-  L.push("Run in   " + model.dist.toFixed(1) + " nm, bearing " + pad3(model.brg) + "°" +
+  L.push("Run in   " + model.trackLen.toFixed(1) + " nm" +
+    (wayPts.length ? " round " + wayPts.length +
+      (wayPts.length === 1 ? " turning point" : " turning points") : "") +
+    ", bearing " + pad3(model.brg) + "\u00B0" +
     (model.speed > 0 ? ", " + model.speed.toFixed(1) + " kt" : ""));
   if (model.transiting) {
     L.push("Passing, not coming in: track set for " + fmtDDM(model.target));
