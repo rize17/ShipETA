@@ -49,6 +49,13 @@ package manager.
   is exactly when it's read. The instant is held in UTC internally and written
   into the field in whichever zone the clock toggle is showing, so flipping the
   toggle rewrites the same moment rather than moving it.
+- **The 560px column is a reading measure, not the app's width.** Past 900px
+  the shell opens to `min(1700px, 96vw)` and only `#pageCalc` is held back to
+  560, so typing a job in and reading the brief back look the same on a
+  laptop as on a phone while the map gets the whole window. The coast runs
+  east–west, so width buys more than height does. Don't widen the Calculate
+  column to match — a 1600px text field is not an improvement.
+
 - **The place lists are folded shut, airfields first.** Settings is mostly
   things you set once, and sixty lines of coordinates sat between the cog and
   them. Both lists are `<details>` reset to closed on every open, not just the

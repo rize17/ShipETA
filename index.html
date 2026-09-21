@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.1</title>
+<title>Ship ETA v4.2</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -430,13 +430,29 @@
   .fold .count::before { content: "("; }
   .fold .count::after  { content: ")"; }
 
+  /* ---------- desktop ---------- */
+  /* 560px is the right measure for typing a job into and for reading the brief
+     back; it is the wrong one for the map, which wants every pixel a laptop
+     has. On a wide screen the shell opens up and only the Calculate column is
+     held back to the width it was drawn at, so that page looks the same as it
+     does on a phone while the coast gets the room it needs. The coast runs
+     east-west, so width is worth more to it than height. */
+  @media (min-width: 900px) {
+    body { max-width: min(1700px, 96vw); }
+    #pageCalc { max-width: 560px; margin: 0 auto; }
+    #mapWrap { height: calc(100vh - 250px); min-height: 460px; }
+    /* The card sat over a third of a phone screen; over a wide map it only
+       needs its own width. */
+    #shipCard { max-width: 30%; }
+  }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.1</span></h1>
+  <h1>Ship ETA<span class="version">v4.2</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
