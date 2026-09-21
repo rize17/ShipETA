@@ -46,6 +46,11 @@ you've dragged it to. Drag the end around and every crossing re-reads.
 The airfields she comes into range of are drawn in aqua; the rest stay violet
 and dashed so you can still see where they are.
 
+Each airfield has a **Rings** switch. Turn it off to keep that one off the map
+— useful where two are close enough that their rings sit on top of each other,
+like Mossel Bay and George at nineteen miles apart. It stays in the list on the
+Calculate tab either way, so nothing is dropped from the reckoning.
+
 The seeded port positions are rounded harbour entrances. The seeded airfield
 positions are approximate and **unverified** — check every one against the AIP
 before anyone plans fuel on it, and correct it in the app.
@@ -107,5 +112,5 @@ Bump the version on every functional change, in all four places at once: the
 `<title>`, the `.version` span, `CACHE` in `sw.js`, and *Current* below. It's
 the only way to confirm a deploy actually landed.
 
-Current: **v3.5**. (v1.0 to v1.2 were built before the app moved to its own
+Current: **v3.6**. (v1.0 to v1.2 were built before the app moved to its own
 repository.)

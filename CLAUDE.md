@@ -53,6 +53,12 @@ package manager.
   pickers, and the distinction is the whole point of the app — don't collapse
   them back into one list. Measuring the rings from the port put the crossing
   points ~9 nm outside the fuel radius on a Cape Town job.
+- **Turning an airfield's rings off is a map setting, not an exclusion.**
+  `hidden` on the place keeps it out of `fieldsShown`/`inRangeShown`, which is
+  what the map and the strip under it draw from — but `fields` and `inRange`
+  still hold everything, and the Calculate list still shows it. Decluttering a
+  coast where two airfields are twenty miles apart must never quietly drop one
+  from the reckoning.
 - **Nothing picks an airfield.** `model.fields` holds every one, each with its
   own closest approach and its own ring crossings; `inRange` is those she
   actually reaches, soonest first, and that list *is* the answer. Don't

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v3.5</title>
+<title>Ship ETA v3.6</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -226,6 +226,9 @@
     border-radius: 7px; padding: 5px 9px; font-size: 0.68rem; cursor: pointer;
   }
   .dest .acts button.del { border-color: rgba(232,106,94,0.35); color: var(--err); }
+  .dest .acts button.ring { color: var(--ink-dim); }
+  .dest .acts button.ring.on { color: var(--aqua); border-color: var(--aqua-deep); }
+  .dest.off .nm, .dest.off .co { opacity: 0.45; }
   .empty { font-size: 0.8rem; color: var(--ink-dim); text-align: center; padding: 18px 0; }
 
   /* ---------- map ---------- */
@@ -369,7 +372,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v3.5</span></h1>
+  <h1>Ship ETA<span class="version">v3.6</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -506,6 +509,9 @@
 
   <h2>Airfields</h2>
   <div id="fieldList"></div>
+  <div class="hint">Turn an airfield's rings off to keep it off the map — useful where two
+    of them are close enough that their rings sit on top of each other. It stays in the
+    list on the Calculate tab either way, so nothing is dropped from the reckoning.</div>
   <div class="hint bad">The airfield positions that came with the app are approximate and
     have not been verified. Check every one against the AIP before anyone plans fuel or a
     range ring on it, and correct it here.</div>
@@ -961,6 +967,7 @@ function compute() {
     const times = legs.filter(l => l.entry && l.entry.hours != null).map(l => l.entry.hours);
     return {
       place: pl, code: icaoOf(pl), cpa, distNow, legs,
+      shown: !pl.hidden,
       reachable: legs.some(l => l.entry || l.insideNow),
       insideNow: legs.some(l => l.insideNow),
       firstHours: times.length ? Math.min.apply(null, times)
@@ -989,9 +996,16 @@ function compute() {
     (ringList[0] || 0) + " nm of any airfield on this track. The nearest she gets is " +
     (outOfRange[0] ? outOfRange[0].cpa.nm.toFixed(0) + " nm off " + outOfRange[0].place.name : "\u2014") + "."]);
 
+  /* Airfields whose rings are turned off in the cog stay out of the map and
+     the strip beneath it — the point is to unclutter a coast where two of them
+     are twenty miles apart. They stay in the list on the Calculate tab, so
+     turning one off never quietly drops it from the reckoning. */
+  const fieldsShown = fields.filter(f => f.shown);
+  const inRangeShown = inRange.filter(f => f.shown);
+
   model = { dest, reported, now, moved, age, dist, distAtReport, brg, speed, aSpeed,
             notes, t0, transiting, target, trackBrg, trackLen, arrival,
-            fields, inRange, outOfRange, ringList };
+            fields, inRange, outOfRange, ringList, fieldsShown, inRangeShown };
 }
 
 const pad3 = v => String(Math.round(v) % 360).padStart(3, "0");
@@ -1288,7 +1302,7 @@ function drawMap(fit) {
   /* Every airfield's rings, all the same standing: the ones her track passes
      inside are drawn to be read, the rest stay faint so you can still see
      where they are. Nothing is picked for you. */
-  model.fields.forEach(f => {
+  model.fieldsShown.forEach(f => {
     const c = [f.place.lat, f.place.lon];
     const live = f.reachable;
     f.legs.forEach(l => {
@@ -1354,7 +1368,7 @@ function drawMap(fit) {
      soonest get the highest priority, so they're the ones that survive when
      the view is too crowded for all of them. */
   const crossings = [];
-  model.inRange.forEach(f => f.legs.forEach(l => {
+  model.inRangeShown.forEach(f => f.legs.forEach(l => {
     if (l.entry) crossings.push({ f, l, at: l.entry, out: false });
     if (l.exit) crossings.push({ f, l, at: l.exit, out: true });
   }));
@@ -1438,7 +1452,7 @@ function fitMap(all) {
   if (all) {
     // The whole coast: every airfield and the full width of its rings.
     const widest = model.ringList.length ? model.ringList[0] : 0;
-    model.fields.forEach(f => {
+    model.fieldsShown.forEach(f => {
       b.extend(widest ? L.latLng(f.place.lat, f.place.lon).toBounds(widest * 2 * 1852)
                       : L.latLngBounds([[f.place.lat, f.place.lon], [f.place.lat, f.place.lon]]));
     });
@@ -1447,7 +1461,7 @@ function fitMap(all) {
        whole rings instead pushed the track into a huddle in the middle with
        its labels on top of one another. */
     b.extend([model.dest.lat, model.dest.lon]);
-    model.inRange.forEach(f => f.legs.forEach(l => {
+    model.inRangeShown.forEach(f => f.legs.forEach(l => {
       if (l.entry) b.extend([l.entry.at.lat, l.entry.at.lon]);
       if (l.exit) b.extend([l.exit.at.lat, l.exit.at.lon]);
     }));
@@ -1477,12 +1491,13 @@ function renderMapSummary() {
     (model.speed > 0 ? " \u00B7 " + fmtClock(at(model.trackLen / model.speed), true) : ""), true]];
 
   const next = [];
-  model.inRange.forEach(f => f.legs.forEach(l => {
+  model.inRangeShown.forEach(f => f.legs.forEach(l => {
     if (l.entry) next.push({ k: f.code + " " + l.ring, s: l.entry.s, h: l.entry.hours });
     else if (l.insideNow) next.push({ k: f.code + " " + l.ring, s: 0, h: 0 });
   }));
   next.sort((a, b2) => a.s - b2.s);
-  if (!next.length) cells.push(["Rings", "none on this track", false]);
+  if (!next.length) cells.push(["Rings",
+    model.fieldsShown.length ? "none on this track" : "all turned off", false]);
   next.slice(0, 5).forEach(n => cells.push([n.k,
     n.s === 0 ? "inside now"
       : n.s.toFixed(1) + " nm" + (n.h == null ? "" : " \u00B7 " + fmtClock(at(n.h), true)), true]));
@@ -1571,11 +1586,14 @@ async function copyText(text, btn, label) {
 /* ================= destinations tab ================= */
 function renderDestList() {
   const card = (p, i) =>
-    '<div class="dest"><div class="top"><div>' +
+    '<div class="dest' + (isField(p) && p.hidden ? " off" : "") + '"><div class="top"><div>' +
       '<div class="nm">' + esc(p.name) + "</div>" +
       '<div class="co mono">' + fmtDDM(p) + "</div>" +
       (p.note ? '<div class="note">' + esc(p.note) + "</div>" : "") +
     '</div><div class="acts">' +
+      (isField(p) ? '<button type="button" class="ring' + (p.hidden ? "" : " on") +
+        '" data-ring="' + i + '" title="Show this airfield\u2019s rings on the map">' +
+        (p.hidden ? "Rings off" : "Rings on") + "</button>" : "") +
       '<button type="button" data-edit="' + i + '">Edit</button>' +
       '<button type="button" class="del" data-del="' + i + '">Delete</button>' +
     "</div></div></div>";
@@ -1709,6 +1727,15 @@ $("dPos").addEventListener("input", () => {
   else { echo.className = "hint bad"; echo.textContent = "Can't read that yet."; $("dPos").classList.add("bad"); }
 });
 ["portList", "fieldList"].forEach(id => $(id).addEventListener("click", e => {
+  const ring = e.target.closest("[data-ring]");
+  if (ring) {
+    const i = parseInt(ring.dataset.ring, 10);
+    places[i].hidden = !places[i].hidden;
+    savePlaces();
+    renderDestList();
+    render();
+    return;
+  }
   const ed = e.target.closest("[data-edit]"), del = e.target.closest("[data-del]");
   if (ed) startEdit(parseInt(ed.dataset.edit, 10));
   if (del) {
