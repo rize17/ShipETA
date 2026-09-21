@@ -119,5 +119,5 @@ Bump the version on every functional change, in all four places at once: the
 `<title>`, the `.version` span, `CACHE` in `sw.js`, and *Current* below. It's
 the only way to confirm a deploy actually landed.
 
-Current: **v4.2**. (v1.0 to v1.2 were built before the app moved to its own
+Current: **v4.3**. (v1.0 to v1.2 were built before the app moved to its own
 repository.)

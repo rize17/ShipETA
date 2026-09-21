@@ -55,6 +55,14 @@ package manager.
   laptop as on a phone while the map gets the whole window. The coast runs
   east–west, so width buys more than height does. Don't widen the Calculate
   column to match — a 1600px text field is not an improvement.
+  Past 900px Calculate is a two-column grid: the form, Copy brief and the
+  assumptions in column 1 at the width they were drawn at, the brief in
+  column 2 spanning all three. A job is typed once and read off many times,
+  so the answer belongs beside the inputs, not below them.
+
+- **Add a place folds too, and Edit opens it.** All three folds in the dialog
+  reset shut on every open, so the cog lands on Ranges. `startEdit` sets
+  `addFold.open` itself — without that, Edit fills in a form nobody can see.
 
 - **The place lists are folded shut, airfields first.** Settings is mostly
   things you set once, and sixty lines of coordinates sat between the cog and

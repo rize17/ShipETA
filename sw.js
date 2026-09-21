@@ -1,6 +1,6 @@
 // Minimal offline shell cache. The calculator needs nothing from the network
 // once it's loaded, so this is what makes it usable on a phone with no signal.
-const CACHE = "shipeta-v4.2";
+const CACHE = "shipeta-v4.3";
 const ASSETS = [
   "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png",
   "./vendor/leaflet.js", "./vendor/leaflet.css"
