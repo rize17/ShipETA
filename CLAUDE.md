@@ -146,6 +146,15 @@ herself, and it's the quickest way to both check a position and set one.
 - **Fit padding is proportional.** A fixed 160px swallowed nearly half the
   width of a phone and cost a whole zoom level. It's a percentage now, floored
   and capped.
+- **The figures belong on the track.** Each ring crossing is labelled with the
+  distance she runs to reach it and the time she gets there, and the end of the
+  line carries the same for wherever it ends. That's the readout — the airfield
+  markers are only identity now, and carry just their code.
+- **Crossings that fall close together are stepped away from the line.** Two
+  rings of one airfield are 20 nm apart, which is a few dozen pixels; labels
+  alternate above and below and each pair moves 30px further out, so they sit
+  in their own rows instead of one of them being dropped. `labelled()` takes a
+  `lift` for this, and `faceLabel()` has to preserve it when it flips a label.
 - **Labels are decluttered by hand.** Zoomed out, permanent tooltips sit on
   each other and hang off the edge. `declutter()` keeps them in priority order
   — port, ring crossings, closest approach, track end, reported position — and

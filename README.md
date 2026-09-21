@@ -38,8 +38,13 @@ from each airfield, because that's what decides whether you can reach her.
 *Reset built-in places to defaults* puts every one of them back to the position
 it shipped with; anything you added yourself is left alone.
 
-On the map the airfields she comes into range of are drawn to be read; the rest
-stay faint so you can still see where they are.
+On the map the figures are on her track. Every ring she cuts is marked and
+labelled with how far she runs to get there and when she gets there, and the
+end of the line says the same for wherever it ends — the port, or wherever
+you've dragged it to. Drag the end around and every crossing re-reads.
+
+The airfields she comes into range of are drawn in aqua; the rest stay violet
+and dashed so you can still see where they are.
 
 The seeded port positions are rounded harbour entrances. The seeded airfield
 positions are approximate and **unverified** — check every one against the AIP
@@ -102,5 +107,5 @@ Bump the version on every functional change, in all four places at once: the
 `<title>`, the `.version` span, `CACHE` in `sw.js`, and *Current* below. It's
 the only way to confirm a deploy actually landed.
 
-Current: **v3.2**. (v1.0 to v1.2 were built before the app moved to its own
+Current: **v3.3**. (v1.0 to v1.2 were built before the app moved to its own
 repository.)
