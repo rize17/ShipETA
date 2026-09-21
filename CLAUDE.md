@@ -53,6 +53,16 @@ package manager.
   pickers, and the distinction is the whole point of the app — don't collapse
   them back into one list. Measuring the rings from the port put the crossing
   points ~9 nm outside the fuel radius on a Cape Town job.
+- **Airfields are offered in coastal order, not storage order.** `FIELD_ORDER`
+  runs round the coast from Cape Town and back up the west side, and both the
+  picker and the list sort by it, so an old saved list comes out in the same
+  order as a fresh one. Anything without a known ICAO code sorts to the end.
+  Adding an airfield in a later release means bumping `SEED_VERSION`, which
+  adds the missing ones once — a plain "have we seeded" flag would never
+  deliver them to anyone already using the app.
+- **Places live behind the cog, not in a tab.** They're set once and then left;
+  giving them a third of the tab bar spent the app's most valuable space on its
+  least used screen.
 - **The airfield positions shipped with the app are unverified.** They are
   approximate ICAO reference points, flagged as such in the list and in the UI,
   and are editable. Never describe them as authoritative, and keep that warning

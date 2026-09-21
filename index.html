@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v2.0</title>
+<title>Ship ETA v2.1</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -285,22 +285,51 @@
   }
   #mapSummary .cell .v.aqua { color: var(--aqua); }
 
+  /* ---------- places dialog ---------- */
+  #placesBtn {
+    background: none; border: 1px solid var(--panel-edge); color: var(--ink-dim);
+    border-radius: 10px; padding: 6px 8px; cursor: pointer; display: flex;
+  }
+  #placesBtn svg { width: 17px; height: 17px; display: block; }
+  #placesBtn:hover { color: var(--ink); }
+  dialog {
+    background: var(--panel); color: var(--ink);
+    border: 1px solid var(--panel-edge); border-radius: 16px;
+    width: min(94vw, 470px); max-height: 86vh; padding: 16px;
+    overflow: auto;
+  }
+  dialog::backdrop { background: rgba(3,9,14,0.78); }
+  dialog h2 {
+    font-size: 0.7rem; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-dim); font-weight: 600; margin: 22px 0 10px;
+  }
+  .dlg-head { display: flex; justify-content: space-between; align-items: center; }
+  .dlg-head h2 { margin: 0; }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v2.0</span></h1>
-  <button id="tzBtn" type="button" title="Switch between local time and UTC">
-    <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
-  </button>
+  <h1>Ship ETA<span class="version">v2.1</span></h1>
+  <div style="display:flex;align-items:center;gap:8px">
+    <button id="tzBtn" type="button" title="Switch between local time and UTC">
+      <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
+    </button>
+    <button id="placesBtn" type="button" aria-label="Places" title="Ports and airfields">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+      </svg>
+    </button>
+  </div>
 </header>
 
 <nav class="view-tabs" id="pageTabs">
   <button class="view-tab active" type="button" data-page="calc">Calculate</button>
   <button class="view-tab" type="button" data-page="map">Map</button>
-  <button class="view-tab" type="button" data-page="dest">Places</button>
 </nav>
 
 <!-- ======================= CALCULATE ======================= -->
@@ -393,48 +422,47 @@
   </section>
 </main>
 
-<!-- ======================= DESTINATIONS ======================= -->
-<main id="pageDest" style="display:none">
-  <section class="panel">
-    <h2 id="destFormTitle">Add a place</h2>
-    <label for="dType">Kind</label>
-    <select id="dType">
-      <option value="port">Port — somewhere she may be heading</option>
-      <option value="airport">Airfield — somewhere we fly from</option>
-    </select>
-    <label for="dName">Name</label>
-    <input id="dName" placeholder="Cape Town Port">
-    <label for="dPos">Position</label>
-    <input id="dPos" spellcheck="false" placeholder="33° 53.880′ S, 018° 25.620′ E">
-    <div class="hint" id="dPosEcho"></div>
-    <label for="dNote">Note (optional)</label>
-    <input id="dNote" placeholder="harbour entrance">
-    <div class="grid2" style="margin-top:14px">
-      <button class="primary" id="dSave" type="button">Save</button>
-      <button class="ghost" id="dCancel" type="button" style="margin-top:0">Cancel</button>
-    </div>
-  </section>
+<!-- ======================= PLACES (settings) ======================= -->
+<dialog id="placesDlg">
+  <div class="dlg-head">
+    <h2>Places</h2>
+    <button class="copy-chip" id="placesClose" type="button">Done</button>
+  </div>
+  <div class="hint">Set these once. Ports are where she may be heading; airfields are
+    where you fly from, and the range rings are measured from the airfield you pick.</div>
 
-  <section class="panel">
-    <h2>Ports</h2>
-    <div id="portList"></div>
-  </section>
+  <h2 id="destFormTitle">Add a place</h2>
+  <label for="dType">Kind</label>
+  <select id="dType">
+    <option value="port">Port — somewhere she may be heading</option>
+    <option value="airport">Airfield — somewhere we fly from</option>
+  </select>
+  <label for="dName">Name</label>
+  <input id="dName" placeholder="Cape Town Port">
+  <label for="dPos">Position</label>
+  <input id="dPos" spellcheck="false" placeholder="33° 53.880′ S, 018° 25.620′ E">
+  <div class="hint" id="dPosEcho"></div>
+  <label for="dNote">Note (optional)</label>
+  <input id="dNote" placeholder="harbour entrance">
+  <div class="grid2" style="margin-top:14px">
+    <button class="primary" id="dSave" type="button">Save</button>
+    <button class="ghost" id="dCancel" type="button" style="margin-top:0">Cancel</button>
+  </div>
 
-  <section class="panel">
-    <h2>Airfields</h2>
-    <div id="fieldList"></div>
-    <div class="hint bad">The airfield positions that came with the app are approximate
-      and have not been verified. Check every one against the AIP before anyone plans
-      fuel or a range ring on it, and correct it here.</div>
-  </section>
+  <h2>Ports</h2>
+  <div id="portList"></div>
 
-  <section class="panel">
-    <button class="ghost" id="dRestore" type="button" style="margin-top:0">Restore the built-in list</button>
-    <div class="hint">The built-in port positions are harbour entrances taken from published
-      coordinates and rounded — check each one against your own chart too, and edit it here
-      if it's out by more than you'd like.</div>
-  </section>
-</main>
+  <h2>Airfields</h2>
+  <div id="fieldList"></div>
+  <div class="hint bad">The airfield positions that came with the app are approximate and
+    have not been verified. Check every one against the AIP before anyone plans fuel or a
+    range ring on it, and correct it here.</div>
+
+  <button class="ghost danger" id="dRestore" type="button">Reset built-in places to defaults</button>
+  <div class="hint">That puts every built-in port and airfield back to the position it
+    shipped with, losing any correction you've made to one. Places you added yourself are
+    left alone.</div>
+</dialog>
 
 <script src="vendor/leaflet.js"></script>
 <script>
@@ -672,13 +700,30 @@ const BUILT_IN = [
   { type: "port", name: "Durban Port",      lat: -29.871667, lon: 31.041667, note: "harbour entrance" },
   { type: "port", name: "Richards Bay",     lat: -28.8050,   lon: 32.0800,   note: "harbour entrance" },
 
-  { type: "airport", name: "FACT Cape Town", lat: -33.9686, lon: 18.6014, note: "check against the AIP" },
-  { type: "airport", name: "FAGG George",    lat: -34.0056, lon: 22.3789, note: "check against the AIP" },
-  { type: "airport", name: "FAMO Mossel Bay",lat: -34.1583, lon: 22.0583, note: "check against the AIP" },
-  { type: "airport", name: "FAEL East London",lat: -33.0358, lon: 27.8258, note: "check against the AIP" },
-  { type: "airport", name: "FALE King Shaka", lat: -29.6153, lon: 31.1194, note: "check against the AIP" },
-  { type: "airport", name: "FASB Springbok",  lat: -29.6894, lon: 17.9394, note: "check against the AIP" }
+  { type: "airport", name: "FACT Cape Town",    lat: -33.9686, lon: 18.6014, note: "check against the AIP" },
+  { type: "airport", name: "FAMO Mossel Bay",   lat: -34.1583, lon: 22.0583, note: "check against the AIP" },
+  { type: "airport", name: "FAGG George",       lat: -34.0056, lon: 22.3789, note: "check against the AIP" },
+  { type: "airport", name: "FAPE Gqeberha (PE)",lat: -33.9847, lon: 25.6172, note: "check against the AIP" },
+  { type: "airport", name: "FAEL East London",  lat: -33.0358, lon: 27.8258, note: "check against the AIP" },
+  { type: "airport", name: "FAMG Margate",      lat: -30.8575, lon: 30.3431, note: "check against the AIP" },
+  { type: "airport", name: "FALE King Shaka",   lat: -29.6153, lon: 31.1194, note: "check against the AIP" },
+  { type: "airport", name: "FARB Richards Bay", lat: -28.7411, lon: 32.0919, note: "check against the AIP" },
+  { type: "airport", name: "FASD Saldanha Bay", lat: -32.9644, lon: 17.9692, note: "check against the AIP" },
+  { type: "airport", name: "FASB Springbok",    lat: -29.6894, lon: 17.9394, note: "check against the AIP" }
 ];
+
+/* The order they're offered in: round the coast from Cape Town, then back up
+   the west side. Sorting by this rather than by whatever order they happen to
+   be stored in means an old saved list comes out in the same order as a new
+   one, and anything you add yourself lands at the end. */
+const FIELD_ORDER = ["FACT", "FAMO", "FAGG", "FAPE", "FAEL", "FAMG", "FALE", "FARB", "FASD", "FASB"];
+function fieldRank(p) {
+  const m = /\b(FA[A-Z]{2})\b/i.exec(p.name + " " + (p.note || ""));
+  const i = m ? FIELD_ORDER.indexOf(m[1].toUpperCase()) : -1;
+  return i < 0 ? 999 : i;
+}
+const inOrder = list => list.slice().sort((a, b) =>
+  fieldRank(a.p) - fieldRank(b.p) || a.p.name.localeCompare(b.p.name));
 
 let places = store.get("shipeta.places", null);
 if (!Array.isArray(places) || !places.length) {
@@ -695,13 +740,14 @@ if (!Array.isArray(places) || !places.length) {
     : BUILT_IN.slice();
   savePlaces();
 }
-/* Anyone who was using this before the airfields existed gets them once, and
-   only once — so deleting one it doesn't want doesn't bring it back. */
-if (!store.get("shipeta.airfieldsSeeded", false)) {
+/* Airfields arrive once per seed version, so a later release can add one
+   without re-adding the ones you've deleted. */
+const SEED_VERSION = 2;
+if (store.get("shipeta.seedVersion", store.get("shipeta.airfieldsSeeded", false) ? 1 : 0) < SEED_VERSION) {
   BUILT_IN.filter(b => b.type === "airport").forEach(b => {
     if (!places.some(p => p.name.toLowerCase() === b.name.toLowerCase())) places.push(b);
   });
-  store.set("shipeta.airfieldsSeeded", true);
+  store.set("shipeta.seedVersion", SEED_VERSION);
   savePlaces();
 }
 function savePlaces() { store.set("shipeta.places", places); }
@@ -752,10 +798,11 @@ function renderDestSelects() {
     const sel = $(id);
     const keep = sel.value || want;
     sel.innerHTML = "";
-    places.forEach((p, i) => {
-      if (isField(p) !== fields) return;
+    let rows = places.map((p, i) => ({ p, i })).filter(r => isField(r.p) === fields);
+    if (fields) rows = inOrder(rows);
+    rows.forEach(r => {
       const o = document.createElement("option");
-      o.value = String(i); o.textContent = p.name;
+      o.value = String(r.i); o.textContent = r.p.name;
       sel.appendChild(o);
     });
     if (!sel.options.length) {
@@ -1537,8 +1584,10 @@ function renderDestList() {
       '<button type="button" class="del" data-del="' + i + '">Delete</button>' +
     "</div></div></div>";
   const fill = (id, want) => {
-    const rows = places.map((p, i) => isField(p) === want ? card(p, i) : "").join("");
-    $(id).innerHTML = rows || '<div class="empty">Nothing saved yet.</div>';
+    let rows = places.map((p, i) => ({ p, i })).filter(r => isField(r.p) === want);
+    if (want) rows = inOrder(rows);
+    $(id).innerHTML = rows.map(r => card(r.p, r.i)).join("") ||
+      '<div class="empty">Nothing saved yet.</div>';
   };
   fill("portList", false);
   fill("fieldList", true);
@@ -1554,7 +1603,7 @@ function startEdit(i) {
   $("dNote").value = p.note || "";
   $("dPosEcho").textContent = "";
   $("dName").focus();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  $("placesDlg").scrollTop = 0;
 }
 
 function resetForm() {
@@ -1599,7 +1648,6 @@ $("pageTabs").addEventListener("click", e => {
   const page = b.dataset.page;
   $("pageCalc").style.display = page === "calc" ? "" : "none";
   $("pageMap").style.display = page === "map" ? "" : "none";
-  $("pageDest").style.display = page === "dest" ? "" : "none";
   if (page === "calc") render();
   if (page === "map") {
     ensureMap();
@@ -1633,6 +1681,14 @@ $("results").addEventListener("click", e => {
   if (b) copyText(b.dataset.copy, b, "Copied");
 });
 
+$("placesBtn").addEventListener("click", () => {
+  resetForm();
+  renderDestList();
+  $("placesDlg").showModal();
+});
+$("placesClose").addEventListener("click", () => $("placesDlg").close());
+$("placesDlg").addEventListener("close", () => { renderDestSelects(); render(); });
+
 $("resetTrackBtn").addEventListener("click", resetTrack);
 $("fitBtn").addEventListener("click", fitMap);
 
@@ -1657,10 +1713,12 @@ $("dPos").addEventListener("input", () => {
   }
 }));
 $("dRestore").addEventListener("click", () => {
-  if (!confirm("Put the built-in ports back? Anything you've added stays.")) return;
-  BUILT_IN.forEach(b => {
-    if (!places.some(p => p.name.toLowerCase() === b.name.toLowerCase())) places.push(b);
-  });
+  if (!confirm("Put every built-in port and airfield back to the position it shipped " +
+               "with? Corrections you've made to them will be lost. Places you added " +
+               "yourself are kept.")) return;
+  // Built-ins go back to their shipped values; anything else is left as it is.
+  const shipped = new Set(BUILT_IN.map(b => b.name.toLowerCase()));
+  places = places.filter(p => !shipped.has(p.name.toLowerCase())).concat(BUILT_IN.map(b => ({ ...b })));
   savePlaces(); renderDestList(); renderDestSelects(); render();
 });
 
