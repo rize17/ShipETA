@@ -42,6 +42,13 @@ package manager.
   back whichever form the person on the radio is using without converting
   anything by hand. The hemisphere letter carries the sign, so the number
   never does as well — no `-34.9705° S`.
+- **The position is stamped with the time it was taken, not its age.** The
+  field is an absolute instant; `ageMinutes()` derives the age from it every
+  time `compute()` runs. Store an age in minutes instead and the whole answer
+  goes stale the moment the app is left open or reopened an hour later — which
+  is exactly when it's read. The instant is held in UTC internally and written
+  into the field in whichever zone the clock toggle is showing, so flipping the
+  toggle rewrites the same moment rather than moving it.
 - **The rings field takes no `inputmode`.** A numeric keypad on a phone has no
   comma, so a field holding "100, 80" can be emptied and then never refilled.
   Any field whose value is a list needs the full keyboard.

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v3.11</title>
+<title>Ship ETA v4.0</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -109,6 +109,17 @@
   .hint { font-size: 0.7rem; color: var(--ink-dim); margin-top: 5px; line-height: 1.45; }
   .hint.good { color: var(--aqua); }
   .hint b { color: var(--ink); font-weight: 650; }
+  .zone {
+    color: var(--aqua-deep); letter-spacing: 0.04em; font-size: 0.6rem;
+    text-transform: none; margin-left: 4px;
+  }
+  .taken-row { display: flex; gap: 8px; align-items: stretch; }
+  .taken-row input { flex: 1; min-width: 0; }
+  .taken-row button {
+    flex: 0 0 auto; padding: 0 14px; border-radius: 8px; cursor: pointer;
+    background: #081420; border: 1px solid var(--panel-edge); color: var(--aqua);
+    font-size: 0.78rem; font-weight: 600;
+  }
   .fmt-row { display: flex; gap: 9px; align-items: baseline; margin-top: 2px; }
   .fmt-row .fmt-tag {
     color: var(--ink-dim); font-size: 0.58rem; letter-spacing: 0.12em;
@@ -398,7 +409,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v3.11</span></h1>
+  <h1>Ship ETA<span class="version">v4.0</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -424,11 +435,6 @@
   <section class="panel">
     <h2>The job</h2>
 
-    <label for="destSel">Destination (where she's heading)</label>
-    <select id="destSel"></select>
-    <div class="hint mono" id="destEcho"></div>
-
-
     <label for="inName">Vessel (optional)</label>
     <input id="inName" placeholder="name or call sign" spellcheck="false">
     <div class="hint">Shown on the map, so a screenshot says which ship it is.</div>
@@ -439,35 +445,20 @@
     <div class="hint" id="posEcho">Type it however MarineTraffic shows it — degrees,
       degrees and minutes, or minutes and seconds, with or without the symbols.</div>
 
-    <div class="grid2">
-      <div>
-        <label for="inSpeed">Speed (kt)</label>
-        <input id="inSpeed" inputmode="decimal" placeholder="12.5">
-      </div>
-      <div>
-        <label for="inAge">Position age (min)</label>
-        <input id="inAge" inputmode="decimal" placeholder="0">
-      </div>
-    </div>
-    <div class="hint" id="ageEcho">How long ago MarineTraffic received that position.
-      The ship is carried forward from it at the speed above.</div>
+    <label for="inSpeed">Average speed (kt)</label>
+    <input id="inSpeed" inputmode="decimal" placeholder="12.5">
 
-    <div class="grid2">
-      <div>
-        <!-- No inputmode: a numeric keypad has no comma, so once you'd deleted
-             the second ring there was no way to type one back. -->
-        <label for="inRings">Range rings (nm)</label>
-        <input id="inRings" placeholder="100, 80" spellcheck="false"
-               autocapitalize="off" autocorrect="off">
-      </div>
-      <div>
-        <label for="inAsset">Cruise speed (kt)</label>
-        <input id="inAsset" inputmode="decimal" placeholder="110">
-      </div>
+    <label for="inTaken">Taken at <span id="takenZone" class="zone"></span></label>
+    <div class="taken-row">
+      <input id="inTaken" type="datetime-local">
+      <button id="nowBtn" type="button">Now</button>
     </div>
-    <div class="hint">Rings: one or more, separated by commas — <b>100, 80</b> gives you
-      both. A lift time is the latest you can be off the ground at that airfield and still
-      make the ring; getting the machine ready is your own business on top.</div>
+    <div class="hint" id="ageEcho">When that position was reported. She's carried forward
+      from it at the speed above, so the figures stay right if you come back to this later.</div>
+
+    <label for="destSel">Destination (where she's heading)</label>
+    <select id="destSel"></select>
+    <div class="hint mono" id="destEcho"></div>
   </section>
 
   <div id="results"></div>
@@ -518,6 +509,24 @@
   </div>
   <div class="hint">Set these once. Ports are where she may be heading; airfields are
     where you fly from, and the range rings are measured from the airfield you pick.</div>
+
+  <h2>Ranges</h2>
+  <div class="grid2">
+    <div>
+      <!-- No inputmode: a numeric keypad has no comma, so once you'd deleted
+           the second ring there was no way to type one back. -->
+      <label for="inRings">Range rings (nm)</label>
+      <input id="inRings" placeholder="100, 80" spellcheck="false"
+             autocapitalize="off" autocorrect="off">
+    </div>
+    <div>
+      <label for="inAsset">Cruise speed (kt)</label>
+      <input id="inAsset" inputmode="decimal" placeholder="110">
+    </div>
+  </div>
+  <div class="hint">Rings: one or more, separated by commas — <b>100, 80</b> gives you
+    both. A lift time is the latest you can be off the ground at that airfield and still
+    make the ring; getting the machine ready is your own business on top.</div>
 
   <h2 id="destFormTitle">Add a place</h2>
   <label for="dType">Kind</label>
@@ -852,13 +861,48 @@ let editing = -1;   // index being edited on the Places tab, -1 = adding
 
 /* ================= inputs ================= */
 const $ = id => document.getElementById(id);
-const FIELDS = ["inName", "inPos", "inSpeed", "inAge", "inRings", "inAsset"];
+const FIELDS = ["inName", "inPos", "inSpeed", "inRings", "inAsset"];
+
+/* When the position was reported, as an instant rather than an age in minutes.
+   An age is only true at the moment it's typed; come back to the job half an
+   hour later and it quietly understates how far she's run. An instant keeps
+   working — every recalculation measures from it to now. */
+let takenAt = null;
+
+// The field shows wall-clock in whichever zone the app is displaying.
+function takenToField() {
+  const el = $("inTaken");
+  $("takenZone").textContent = useUTC ? "UTC" : tzLabel();
+  if (takenAt == null) { el.value = ""; return; }
+  const d = new Date(takenAt);
+  const p = n => String(n).padStart(2, "0");
+  el.value = useUTC
+    ? d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate()) +
+      "T" + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes())
+    : d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) +
+      "T" + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+
+function takenFromField() {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec($("inTaken").value);
+  if (!m) { takenAt = null; return; }
+  const y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5];
+  takenAt = useUTC ? Date.UTC(y, mo - 1, d, h, mi) : new Date(y, mo - 1, d, h, mi).getTime();
+}
+
+// Minutes between the report and now, which is what the run forward is built on.
+function ageMinutes() {
+  if (takenAt == null) return 0;
+  return Math.max(0, (Date.now() - takenAt) / 60000);
+}
 
 function loadInputs() {
   const saved = store.get("shipeta.inputs", {});
   FIELDS.forEach(f => { if (saved[f] != null) $(f).value = saved[f]; });
   if (!$("inRings").value) $("inRings").value = "100, 80";
   if (!$("inAsset").value) $("inAsset").value = "110";
+  if (isFinite(saved.takenAt)) takenAt = saved.takenAt;
+  takenToField();
   if (saved.trackTo && isFinite(saved.trackTo.lat) && isFinite(saved.trackTo.lon)) {
     trackTo = { lat: saved.trackTo.lat, lon: saved.trackTo.lon };
   }
@@ -871,6 +915,7 @@ function saveInputs() {
   const out = {};
   FIELDS.forEach(f => out[f] = $(f).value);
   out.dest = $("destSel").value;
+  out.takenAt = takenAt;
   out.trackTo = trackTo;
   out.wayPts = wayPts;
   store.set("shipeta.inputs", out);
@@ -919,7 +964,7 @@ function compute() {
   const dest = places[parseInt($("destSel").value, 10)] || null;
   const ship = parseCoords($("inPos").value);
   const speed = num("inSpeed");
-  const age = Math.max(0, num("inAge") || 0);
+  const age = ageMinutes();
   const name = $("inName").value.trim();
 
   const notes = [];
@@ -1056,6 +1101,9 @@ function compute() {
 
   if (speed == null || speed <= 0) notes.push(["warn", "Enter the ship's speed to get times."]);
   else if (speed > 40) notes.push(["warn", speed.toFixed(1) + " kt is fast for a ship — check it."]);
+  if (takenAt != null && takenAt > Date.now() + 60000)
+    notes.push(["warn", "That position time is in the future \u2014 check it, and whether " +
+      "you meant " + (useUTC ? "local time" : "UTC") + "."]);
   if (ship.lat > 0) notes.push(["warn", "That latitude is north of the equator. " +
     "If you meant southern Africa it wants an S."]);
   if (dist > 3000) notes.push(["warn", "That's " + Math.round(dist) +
@@ -1123,19 +1171,21 @@ function renderResults() {
     return;
   }
 
-  // Position age
+  /* How old the report is, worked out rather than typed — so it keeps counting
+     up while the job is open and is still right tomorrow. */
   const ageEcho = $("ageEcho");
   if (model.age > 0 && model.moved > 0) {
     ageEcho.className = "hint good";
-    ageEcho.textContent = "That position is " + fmtRun(model.age / 60) + " old, so the ship is " +
-      "carried " + model.moved.toFixed(1) + " nm further on — everything below is from now.";
+    ageEcho.textContent = "That position is " + fmtRun(model.age / 60) + " old now, so she's " +
+      "carried " + model.moved.toFixed(1) + " nm on from it — everything below is from now.";
   } else if (model.age > 0) {
     ageEcho.className = "hint";
-    ageEcho.textContent = "Add the speed and the ship will be carried forward from that position.";
+    ageEcho.textContent = "That position is " + fmtRun(model.age / 60) + " old. Add her speed " +
+      "and she'll be carried forward from it.";
   } else {
     ageEcho.className = "hint";
-    ageEcho.textContent = "How long ago MarineTraffic received that position. " +
-      "The ship is carried forward from it at the speed above.";
+    ageEcho.textContent = "When that position was reported. She's carried forward from it at " +
+      "the speed above, so the figures stay right if you come back to this later.";
   }
 
   const html = [];
@@ -1847,14 +1897,23 @@ $("pageTabs").addEventListener("click", e => {
   if (b) showPage(b.dataset.page);
 });
 
-["inName", "inPos", "inSpeed", "inAge", "inRings", "inAsset"].forEach(id =>
+["inName", "inPos", "inSpeed", "inRings", "inAsset"].forEach(id =>
   $(id).addEventListener("input", () => { saveInputs(); render(); }));
+
+$("inTaken").addEventListener("input", () => { takenFromField(); saveInputs(); render(); });
+$("nowBtn").addEventListener("click", () => {
+  takenAt = Date.now();
+  takenToField();
+  saveInputs();
+  render();
+});
 ["destSel"].forEach(id =>
   $(id).addEventListener("change", () => { saveInputs(); render(); }));
 
 $("tzBtn").addEventListener("click", () => {
   useUTC = !useUTC;
   store.set("shipeta.utc", useUTC);
+  takenToField();          // the same instant, written in the other zone
   tick();
   render();
 });
