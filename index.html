@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v3.7</title>
+<title>Ship ETA v3.8</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -397,7 +397,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v3.7</span></h1>
+  <h1>Ship ETA<span class="version">v3.8</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -492,8 +492,7 @@
 <main id="pageMap" style="display:none">
   <section class="panel">
     <div class="map-head">
-      <button id="fitBtn" type="button">Fit her</button>
-      <button id="fitAllBtn" type="button">Fit all airfields</button>
+      <button id="fitBtn" type="button">Fit</button>
       <button id="clearWayBtn" type="button" style="display:none">Straighten</button>
       <button id="resetTrackBtn" type="button" style="display:none">Back to port</button>
     </div>
@@ -859,16 +858,17 @@ function loadInputs() {
   if (saved.trackTo && isFinite(saved.trackTo.lat) && isFinite(saved.trackTo.lon)) {
     trackTo = { lat: saved.trackTo.lat, lon: saved.trackTo.lon };
   }
-  if (saved.wayPt && isFinite(saved.wayPt.lat) && isFinite(saved.wayPt.lon)) {
-    wayPt = { lat: saved.wayPt.lat, lon: saved.wayPt.lon };
-  }
+  const savedWays = Array.isArray(saved.wayPts) ? saved.wayPts
+    : (saved.wayPt ? [saved.wayPt] : []);      // it used to be a single bend
+  wayPts = savedWays.filter(w => w && isFinite(w.lat) && isFinite(w.lon))
+                    .map(w => ({ lat: w.lat, lon: w.lon })).slice(0, 4);
 }
 function saveInputs() {
   const out = {};
   FIELDS.forEach(f => out[f] = $(f).value);
   out.dest = $("destSel").value;
   out.trackTo = trackTo;
-  out.wayPt = wayPt;
+  out.wayPts = wayPts;
   store.set("shipeta.inputs", out);
 }
 
@@ -931,7 +931,7 @@ function compute() {
      coast has to round the peninsula before she can turn for the port, and a
      straight line to the port runs over land — so the turning point is dragged
      onto the corner and everything is measured the way she'll actually steam. */
-  const vertices = [reported].concat(wayPt ? [wayPt] : []).concat([target]);
+  const vertices = [reported].concat(wayPts).concat([target]);
   const segs = [];
   let total = 0;
   for (let i = 0; i < vertices.length - 1; i++) {
@@ -1058,8 +1058,9 @@ function compute() {
     " nm from " + dest.name + " — worth re-reading the coordinates."]);
   if (transiting) notes.push(["good", "Her track is set from the map: she passes " +
     dest.name + " rather than coming in. Times below are for that track."]);
-  if (wayPt) notes.push(["good", "Turning point set: she's taken round it, " +
-    trackLen.toFixed(1) + " nm to run against " +
+  if (wayPts.length) notes.push(["good", wayPts.length +
+    (wayPts.length === 1 ? " turning point" : " turning points") + " set: " +
+    trackLen.toFixed(1) + " nm to run round them, against " +
     distanceNm(now, target).toFixed(1) + " nm straight."]);
   if (!fields.length) notes.push(["bad", "No airfields saved \u2014 add them under the cog."]);
   else if (!inRange.length) notes.push(["warn", "She never comes inside " +
@@ -1236,10 +1237,10 @@ let map = null, overlay = null, tilesFailed = false;
 /* Where she's steaming, when it isn't the port. Set by dragging the end of her
    track on the map; null means she's coming straight in. */
 let trackTo = null;
-/* An optional bend in her track. A ship coming up from the east has to round
-   the peninsula before she can turn for the port, and the straight line runs
-   over land. */
-let wayPt = null;
+/* Bends in her track, in the order she takes them. Rounding the peninsula and
+   then turning north for the port is two of them, and a straight line to the
+   port would run over land. */
+let wayPts = [];
 
 
 function ensureMap() {
@@ -1291,12 +1292,23 @@ function setTrackFromMap(lat, lon) {
   $("resetTrackBtn").style.display = "";
 }
 
-function setWayPoint(lat, lon) {
-  wayPt = lat == null ? null : { lat, lon };
+// Dragging the middle of a leg puts a new bend in it; dragging a bend moves it.
+function setWayPoint(i, lat, lon, insert) {
+  if (insert) wayPts.splice(i, 0, { lat, lon });
+  else wayPts[i] = { lat, lon };
+  if (wayPts.length > 4) wayPts.length = 4;
   saveInputs();
   render();
   drawMap(false);
-  $("clearWayBtn").style.display = wayPt ? "" : "none";
+  $("clearWayBtn").style.display = wayPts.length ? "" : "none";
+}
+
+function straighten() {
+  wayPts = [];
+  saveInputs();
+  render();
+  drawMap(true);
+  $("clearWayBtn").style.display = "none";
 }
 
 function resetTrack() {
@@ -1352,6 +1364,22 @@ function declutter() {
     q.left >= box.left && q.right <= box.right && q.top >= box.top && q.bottom <= box.bottom &&
     !kept.some(k => q.left < k.right && q.right > k.left && q.top < k.bottom && q.bottom > k.top);
 
+  /* A label that runs off the side gets pulled back in rather than being left
+     half off the map — the end of the track sits at the edge often enough, and
+     it was losing its distance off the left-hand side. */
+  const nudge = r => {
+    const q = measure(r);
+    let dx = 0;
+    if (q.left < box.left) dx = box.left + 2 - q.left;
+    else if (q.right > box.right) dx = box.right - 2 - q.right;
+    if (!dx) return q;
+    const tt = r.layer.getTooltip();
+    const o = tt.options.offset;
+    tt.options.offset = [o[0] + dx, o[1]];
+    tt.update();
+    return measure(r);
+  };
+
   refs.forEach(r => {
     let q = measure(r);
     if (!fits(q)) {
@@ -1359,11 +1387,11 @@ function declutter() {
       const alt = { right: "left", left: "right", top: "bottom", bottom: "top" }[r.dir] || "left";
       faceLabel(r, alt);
       q = measure(r);
-      if (!fits(q)) { faceLabel(r, r.dir); q = measure(r); }
+      if (!fits(q)) { faceLabel(r, r.dir); q = nudge(r); }
     }
     /* The destination is never dropped: overlapping it slightly beats losing
        how far off and how long it is. */
-    if (fits(q) || r.prio === 1) kept.push(q);
+    if (fits(q) || r.prio === 1) { kept.push(r.prio === 1 ? nudge(r) : q); }
     else r.layer.getTooltip().getElement().style.visibility = "hidden";
   });
 }
@@ -1513,22 +1541,43 @@ function drawMap(fit) {
   /* Drag the middle of the line to bend it round a headland; drag the bend
      again to move it. Without one the handle sits at the halfway mark, faint,
      the way a route is reshaped on any map. */
-  const midS = model.trackLen / 2;
-  const bend = wayPt ? [wayPt.lat, wayPt.lon]
-                     : (p => [p.lat, p.lon])(model.fromNow(midS));
-  const bendMk = L.marker(bend, {
-    draggable: true, autoPan: true,
-    icon: L.divIcon({ className: "",
-      html: '<span class="pin-handle-wrap"><i class="pin pin-bend' +
-            (wayPt ? " set" : "") + '"></i></span>',
-      iconSize: [30, 30], iconAnchor: [15, 15] })
-  }).addTo(overlay);
-  bendMk.bindTooltip(wayPt ? "turning point \u2014 drag to move"
-                           : "drag to bend her track round a headland",
-    { direction: "top", className: "lbl dim" });
-  bendMk.on("dragend", e => {
-    const ll = e.target.getLatLng();
-    setWayPoint(ll.lat, ll.lng);
+  /* A solid handle on each turning point she hasn't reached yet, and a faint
+     one at the middle of every leg — drag that and a new turning point goes in
+     at that place in the line, which is how you take her round a point and
+     then up the coast. */
+  wayPts.forEach((w, i) => {
+    const vIdx = i + 1;                       // its place among the vertices
+    if (model.segs[vIdx] && model.segs[vIdx].start <= model.runS) return;  // behind her
+    const mk = L.marker([w.lat, w.lon], {
+      draggable: true, autoPan: true,
+      icon: L.divIcon({ className: "",
+        html: '<span class="pin-handle-wrap"><i class="pin pin-bend set"></i></span>',
+        iconSize: [30, 30], iconAnchor: [15, 15] })
+    }).addTo(overlay);
+    mk.bindTooltip("turning point " + (i + 1) + " \u2014 drag to move",
+      { direction: "top", className: "lbl dim" });
+    mk.on("dragend", e => {
+      const ll = e.target.getLatLng();
+      setWayPoint(i, ll.lat, ll.lng, false);
+    });
+  });
+
+  if (wayPts.length < 4) model.segs.forEach((g, i) => {
+    const end = g.start + g.len;
+    if (end <= model.runS) return;                       // leg already behind her
+    const from = Math.max(g.start, model.runS);
+    const mid = along(g.from, g.brg, (from - g.start) + (end - from) / 2);
+    const mk = L.marker([mid.lat, mid.lon], {
+      draggable: true, autoPan: true,
+      icon: L.divIcon({ className: "",
+        html: '<span class="pin-handle-wrap"><i class="pin pin-bend"></i></span>',
+        iconSize: [30, 30], iconAnchor: [15, 15] })
+    }).addTo(overlay);
+    mk.bindTooltip("drag to bend her track here", { direction: "top", className: "lbl dim" });
+    mk.on("dragend", e => {
+      const ll = e.target.getLatLng();
+      setWayPoint(i, ll.lat, ll.lng, true);
+    });
   });
 
   /* The open end of her track is the handle: drag it to where she's really
@@ -1559,27 +1608,19 @@ function drawMap(fit) {
 /* "Fit her" frames the job — her track and the airfields she can be reached
    from. "Fit all airfields" pulls back far enough to see every ring on the
    coast, which is the whole point of drawing them all. */
-function fitMap(all) {
+function fitMap() {
   if (!map || !model) return;
+  /* Her track end to end, its turning points, and every ring she cuts along
+     it. Framing whole rings instead pushed the track into a huddle in the
+     middle with its labels on top of one another. */
   const b = L.latLngBounds([[model.now.lat, model.now.lon],
                             [model.target.lat, model.target.lon]]);
-  if (all) {
-    // The whole coast: every airfield and the full width of its rings.
-    const widest = model.ringList.length ? model.ringList[0] : 0;
-    model.fieldsShown.forEach(f => {
-      b.extend(widest ? L.latLng(f.place.lat, f.place.lon).toBounds(widest * 2 * 1852)
-                      : L.latLngBounds([[f.place.lat, f.place.lon], [f.place.lat, f.place.lon]]));
-    });
-  } else {
-    /* The job: her track end to end and every ring she cuts along it. Framing
-       whole rings instead pushed the track into a huddle in the middle with
-       its labels on top of one another. */
-    b.extend([model.dest.lat, model.dest.lon]);
-    model.inRangeShown.forEach(f => f.legs.forEach(l => {
-      if (l.entry) b.extend([l.entry.at.lat, l.entry.at.lon]);
-      if (l.exit) b.extend([l.exit.at.lat, l.exit.at.lon]);
-    }));
-  }
+  b.extend([model.dest.lat, model.dest.lon]);
+  wayPts.forEach(w => b.extend([w.lat, w.lon]));
+  model.inRangeShown.forEach(f => f.legs.forEach(l => {
+    if (l.entry) b.extend([l.entry.at.lat, l.entry.at.lon]);
+    if (l.exit) b.extend([l.exit.at.lat, l.exit.at.lon]);
+  }));
   /* Padding in proportion to the map, not a fixed 160px that swallowed nearly
      half of a phone's width and cost a whole zoom level. Labels that still
      don't fit are dropped by declutter(), so this only has to be generous
@@ -1791,7 +1832,7 @@ function showPage(page) {
   if (page === "map") {
     ensureMap();
     $("resetTrackBtn").style.display = trackTo ? "" : "none";
-    $("clearWayBtn").style.display = wayPt ? "" : "none";
+    $("clearWayBtn").style.display = wayPts.length ? "" : "none";
     compute();
     // The container had no size until now, so Leaflet has to be told.
     setTimeout(() => drawMap(true), 0);
@@ -1844,10 +1885,9 @@ $("placesDlg").addEventListener("close", () => {
   render();
 });
 
-$("clearWayBtn").addEventListener("click", () => setWayPoint(null));
+$("clearWayBtn").addEventListener("click", straighten);
 $("resetTrackBtn").addEventListener("click", resetTrack);
-$("fitBtn").addEventListener("click", () => fitMap(false));
-$("fitAllBtn").addEventListener("click", () => fitMap(true));
+$("fitBtn").addEventListener("click", () => fitMap());
 
 $("dSave").addEventListener("click", saveDest);
 $("dCancel").addEventListener("click", resetForm);

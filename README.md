@@ -65,8 +65,10 @@ on the ground, her track in, where she crosses each ring, and the ship herself.
 
 **When the straight line runs over land** — a ship coming up from the east has
 to round the peninsula before she can turn for the port — drag the middle of
-her track onto the corner. Everything is then measured the way she'll actually
-steam: the run in, the ETA, and every ring crossing. *Straighten* removes it.
+her track onto the corner. A faint handle sits in the middle of every leg, so
+drag one, then the next, and you have her round the point and up the coast.
+Everything is then measured the way she'll actually steam: the run in, the ETA,
+and every ring crossing. *Straighten* takes them all out.
 
 **When she isn't coming in**, drag the open end of her track to where she's
 actually heading — past the port and on up the coast, say. The rings stay where
@@ -117,5 +119,5 @@ Bump the version on every functional change, in all four places at once: the
 `<title>`, the `.version` span, `CACHE` in `sw.js`, and *Current* below. It's
 the only way to confirm a deploy actually landed.
 
-Current: **v3.7**. (v1.0 to v1.2 were built before the app moved to its own
+Current: **v3.8**. (v1.0 to v1.2 were built before the app moved to its own
 repository.)

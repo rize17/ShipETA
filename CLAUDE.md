@@ -124,6 +124,12 @@ The page the app opens on, built on the vendored Leaflet. It plots the destinati
 rings as circles on the ground, her track in, the ring crossings and the ship
 herself, and it's the quickest way to both check a position and set one.
 
+- **Any leg can be bent, and a bend can be bent again.** `wayPts` is an
+  ordered list, capped at four. Every leg carries a faint midpoint handle whose
+  drag inserts a turning point *at that leg's index*, which is what lets you
+  take her round a point and then up a coast; each existing turning point has
+  its own handle that moves it. Handles for legs and bends already behind her
+  aren't drawn.
 - **Her track is a line with an optional bend in it.** A ship coming up the
   east coast rounds the peninsula before turning for the port, so a straight
   line to it runs over land and every figure taken off that line is wrong.
@@ -181,6 +187,11 @@ herself, and it's the quickest way to both check a position and set one.
   alternate above and below and each pair moves 30px further out, so they sit
   in their own rows instead of one of them being dropped. `labelled()` takes a
   `lift` for this, and `faceLabel()` has to preserve it when it flips a label.
+- **A label that would hang off the edge is pulled back in, not just dropped.**
+  Priority 1 is never hidden, which used to mean it could sit half outside the
+  map with its figures cut off — the end of the track lands at the edge often
+  enough that it lost its distance entirely. `declutter()` nudges it inside
+  before keeping it.
 - **Labels are decluttered by hand.** Zoomed out, permanent tooltips sit on
   each other and hang off the edge. `declutter()` keeps them in priority order
   — port, ring crossings, closest approach, track end, reported position — and
