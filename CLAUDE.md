@@ -127,6 +127,19 @@ herself, and it's the quickest way to both check a position and set one.
 - **Grab areas are 30px square** with the marker drawn inside them. The hull
   and the track handle are about 13px, far too small for a finger — keep the
   wrappers.
+- **The map renderer needs padding.** A 100 nm circle is larger than the
+  screen at most useful zooms, and Leaflet only paints vectors within a small
+  margin of the viewport — so rings reaching off the edge stayed blank until a
+  zoom forced a repaint, which reads as "the rings only appear when I zoom".
+  The map is built with `L.svg({ padding: 2 })`; don't remove it. `rings.js`
+  counts the painted paths on a first draw with no zoom touched.
+- **Two ring colours, both legible.** Aqua where her track comes inside,
+  slate dashed where it never does. Faint-and-grey for the second kind was
+  invisible on a phone in daylight — being able to see where the other
+  airfields are is the reason they're drawn at all.
+- **Fit padding is proportional.** A fixed 160px swallowed nearly half the
+  width of a phone and cost a whole zoom level. It's a percentage now, floored
+  and capped.
 - **Labels are decluttered by hand.** Zoomed out, permanent tooltips sit on
   each other and hang off the edge. `declutter()` keeps them in priority order
   — port, ring crossings, closest approach, track end, reported position — and

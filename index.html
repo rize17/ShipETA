@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v3.0</title>
+<title>Ship ETA v3.1</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -258,8 +258,11 @@
   .pin-dest { width: 16px; height: 16px; background: var(--aqua); border: 2px solid #04121a; }
   .pin-base { width: 14px; height: 14px; background: var(--ok); border: 2px solid #04121a; }
   .pin-old  { width: 10px; height: 10px; background: none; border: 2px dashed var(--ink-dim); }
-  .pin-other { width: 8px; height: 8px; background: var(--ink-dim); opacity: 0.8; }
-  .pin-other.live { background: var(--ok); opacity: 1; }
+  .pin-other {
+    width: 9px; height: 9px; background: #8aa6bb; opacity: 0.9;
+    border: 1px solid #04121a;
+  }
+  .pin-other.live { background: var(--ok); opacity: 1; border-color: #04121a; }
   .pin-cross { width: 11px; height: 11px; background: #04121a; border: 2px solid var(--aqua); }
   .pin-handle-wrap {
     width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
@@ -356,7 +359,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v3.0</span></h1>
+  <h1>Ship ETA<span class="version">v3.1</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -447,8 +450,9 @@
 <main id="pageMap">
   <section class="panel">
     <div class="map-head">
-      <button id="resetTrackBtn" type="button" style="display:none">Track back to port</button>
-      <button id="fitBtn" type="button">Fit everything</button>
+      <button id="fitBtn" type="button">Fit her</button>
+      <button id="fitAllBtn" type="button">Fit all airfields</button>
+      <button id="resetTrackBtn" type="button" style="display:none">Back to port</button>
     </div>
     <div id="mapWrap"><div id="map"></div></div>
     <div class="hint" id="mapNote">Drag the open end of her track to where she's actually
@@ -1144,8 +1148,15 @@ let trackTo = null;
 
 function ensureMap() {
   if (map) return;
-  map = L.map("map", { zoomControl: true, attributionControl: true })
-         .setView([-33.9, 18.4], 6);
+  /* A 100 nm circle is bigger than the screen at most useful zooms, and
+     Leaflet's renderer only paints vectors within a small margin of the
+     viewport — so rings reaching off the edge stayed blank until a zoom forced
+     a repaint. Give the renderer room either side of the view and they're
+     drawn once, properly. */
+  map = L.map("map", {
+    zoomControl: true, attributionControl: true,
+    renderer: L.svg({ padding: 2 })
+  }).setView([-33.9, 18.4], 6);
   const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 18, minZoom: 2,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -1173,9 +1184,9 @@ function noteMap(text, kind) {
   el.textContent = text || (trackTo
     ? "Her track is set by hand \u2014 she passes the port rather than coming in. " +
       "Drag the open end again to adjust it, or put it back to the port."
-    : "Drag the open end of her track to where she's actually heading, for when " +
-      "she's passing rather than coming in. Her position comes off the Calculate " +
-      "tab, not off this map.");
+    : "Aqua rings are airfields she comes into range of; slate ones she never does. " +
+      "Drag the open end of her track to where she's actually heading, for when she's " +
+      "passing rather than coming in \u2014 her position comes off the Calculate tab.");
 }
 
 /* She steams towards whatever this is, and the rings stay where they are:
@@ -1269,9 +1280,13 @@ function drawMap(fit) {
     const live = f.reachable;
     f.legs.forEach(l => {
       L.circle(c, {
-        radius: l.ring * 1852, color: "#38c8e8", weight: live ? 1.4 : 1,
-        opacity: live ? (l.misses ? 0.3 : 0.7) : 0.13,
-        fill: false, dashArray: live && !l.misses ? null : "3 6"
+        // Aqua where she comes into range, slate where she never does.
+        radius: l.ring * 1852,
+        color: live ? "#38c8e8" : "#8aa6bb",
+        weight: live ? 1.8 : 1.3,
+        opacity: live ? (l.misses ? 0.5 : 0.95) : 0.55,
+        fill: false,
+        dashArray: live ? (l.misses ? "6 5" : null) : "5 7"
       }).addTo(overlay);
     });
     const mk = L.marker(c, {
@@ -1362,18 +1377,26 @@ function drawMap(fit) {
   setTimeout(declutter, 0);
 }
 
-function fitMap() {
+/* "Fit her" frames the job — her track and the airfields she can be reached
+   from. "Fit all airfields" pulls back far enough to see every ring on the
+   coast, which is the whole point of drawing them all. */
+function fitMap(all) {
   if (!map || !model) return;
   const b = L.latLngBounds([[model.now.lat, model.now.lon],
                             [model.dest.lat, model.dest.lon]]);
   if (model.transiting) b.extend([model.target.lat, model.target.lon]);
-  // Anywhere she actually comes into range of belongs in view, rings and all.
   const widest = model.ringList.length ? model.ringList[0] : 0;
-  model.inRange.forEach(f => {
+  (all ? model.fields : model.inRange).forEach(f => {
     b.extend(widest ? L.latLng(f.place.lat, f.place.lon).toBounds(widest * 2 * 1852)
                     : L.latLngBounds([[f.place.lat, f.place.lon], [f.place.lat, f.place.lon]]));
   });
-  map.fitBounds(b, { paddingTopLeft: [70, 44], paddingBottomRight: [90, 50] });
+  /* Padding in proportion to the map, not a fixed 160px that swallowed nearly
+     half of a phone's width and cost a whole zoom level. Labels that still
+     don't fit are dropped by declutter(), so this only has to be generous
+     enough to breathe. */
+  const w = map.getContainer().clientWidth || 360;
+  const padX = Math.max(24, Math.min(64, Math.round(w * 0.11)));
+  map.fitBounds(b, { paddingTopLeft: [padX, 38], paddingBottomRight: [padX, 46] });
 }
 
 function renderMapSummary() {
@@ -1608,7 +1631,8 @@ $("placesDlg").addEventListener("close", () => {
 });
 
 $("resetTrackBtn").addEventListener("click", resetTrack);
-$("fitBtn").addEventListener("click", fitMap);
+$("fitBtn").addEventListener("click", () => fitMap(false));
+$("fitAllBtn").addEventListener("click", () => fitMap(true));
 
 $("dSave").addEventListener("click", saveDest);
 $("dCancel").addEventListener("click", resetForm);
