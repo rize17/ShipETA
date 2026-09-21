@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v3.9</title>
+<title>Ship ETA v3.10</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -398,7 +398,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v3.9</span></h1>
+  <h1>Ship ETA<span class="version">v3.10</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -1368,34 +1368,22 @@ function declutter() {
     q.left >= box.left && q.right <= box.right && q.top >= box.top && q.bottom <= box.bottom &&
     !kept.some(k => q.left < k.right && q.right > k.left && q.top < k.bottom && q.bottom > k.top);
 
-  /* A label that runs off the side gets pulled back in rather than being left
-     half off the map — the end of the track sits at the edge often enough, and
-     it was losing its distance off the left-hand side. */
-  const nudge = r => {
-    const q = measure(r);
-    let dx = 0;
-    if (q.left < box.left) dx = box.left + 2 - q.left;
-    else if (q.right > box.right) dx = box.right - 2 - q.right;
-    if (!dx) return q;
-    const tt = r.layer.getTooltip();
-    const o = tt.options.offset;
-    tt.options.offset = [o[0] + dx, o[1]];
-    tt.update();
-    return measure(r);
-  };
-
   refs.forEach(r => {
+    /* The end of her track doesn't move. It's the figure you keep going back
+       to, and a label that flips sides or slides itself into view to stay
+       readable is harder to follow than one that sits still and is sometimes
+       half off the edge — pan the map a little and it's there. */
+    if (r.prio === 1) { kept.push(measure(r)); return; }
+
     let q = measure(r);
     if (!fits(q)) {
       // Try the other side of the marker before dropping it.
       const alt = { right: "left", left: "right", top: "bottom", bottom: "top" }[r.dir] || "left";
       faceLabel(r, alt);
       q = measure(r);
-      if (!fits(q)) { faceLabel(r, r.dir); q = nudge(r); }
+      if (!fits(q)) { faceLabel(r, r.dir); q = measure(r); }
     }
-    /* The destination is never dropped: overlapping it slightly beats losing
-       how far off and how long it is. */
-    if (fits(q) || r.prio === 1) { kept.push(r.prio === 1 ? nudge(r) : q); }
+    if (fits(q)) kept.push(q);
     else r.layer.getTooltip().getElement().style.visibility = "hidden";
   });
 }
@@ -1519,14 +1507,15 @@ function drawMap(fit) {
   });
 
   // The port she's heading for.
-  const destLabel = model.dest.name + "<br>" +
-    (model.arrival ? model.arrival.togo : model.dist).toFixed(1) + " nm" +
-    (model.arrival && model.arrival.hours != null
-      ? " \u00B7 " + fmtClock(at(model.arrival.hours), true) : "");
-  labelled(L.marker(dest, {
+  /* Its name only. A distance here would be the straight line to it, which is
+     the line the turning points exist to avoid — over land, and read as fact.
+     The run in belongs on the end of her track, where it's the distance she
+     actually steams. */
+  const destMk = L.marker(dest, {
     icon: L.divIcon({ className: "", html: '<i class="pin pin-dest"></i>', iconSize: [16, 16] }),
     interactive: false
-  }), destLabel, false, "bottom", model.transiting ? 6 : 1).addTo(overlay);
+  }).addTo(overlay);
+  if (model.transiting) labelled(destMk, model.dest.name, true, "bottom", 6);
 
   /* The ship is drawn where her coordinates put her and is not draggable —
      her position comes off MarineTraffic, never off this map. */
@@ -1591,14 +1580,14 @@ function drawMap(fit) {
     icon: L.divIcon({ className: "", html: '<span class="pin-handle-wrap">' +
       '<i class="pin pin-handle"></i></span>', iconSize: [30, 30], iconAnchor: [15, 15] })
   }).addTo(overlay);
-  /* Whatever the line ends on — the port, or wherever you've dragged it —
-     says how far it is and when she gets there. */
-  if (model.transiting) {
-    const endH = model.speed > 0 ? model.trackLen / model.speed : null;
-    labelled(handle, "end of track<br>" + model.trackLen.toFixed(1) + " nm" +
-      (endH == null ? "" : " \u00B7 " + fmtClock(at(endH), true)),
-      false, "bottom", 1);
-  }
+  /* Whatever the line ends on — the port, or wherever you've dragged it — says
+     how far she steams to get there and when. This is the only run-in figure
+     on the map, and it's the one measured round the turning points. */
+  const endH = model.speed > 0 ? model.trackLen / model.speed : null;
+  labelled(handle, (model.transiting ? "end of track" : model.dest.name) + "<br>" +
+    model.trackLen.toFixed(1) + " nm" +
+    (endH == null ? "" : " \u00B7 " + fmtClock(at(endH), true)),
+    false, "bottom", 1);
   handle.on("dragend", e => {
     const ll = e.target.getLatLng();
     setTrackFromMap(ll.lat, ll.lng);

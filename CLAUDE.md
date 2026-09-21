@@ -190,11 +190,15 @@ herself, and it's the quickest way to both check a position and set one.
   alternate above and below and each pair moves 30px further out, so they sit
   in their own rows instead of one of them being dropped. `labelled()` takes a
   `lift` for this, and `faceLabel()` has to preserve it when it flips a label.
-- **A label that would hang off the edge is pulled back in, not just dropped.**
-  Priority 1 is never hidden, which used to mean it could sit half outside the
-  map with its figures cut off — the end of the track lands at the edge often
-  enough that it lost its distance entirely. `declutter()` nudges it inside
-  before keeping it.
+- **The end of the track is pinned.** Priority 1 is never hidden, never
+  flipped and never slid into view: it sits at its marker and is sometimes
+  half off the edge, which you pan to. A label that moves itself to stay
+  readable is harder to follow than one that stays put, and the same figure is
+  in the strip under the map regardless.
+- **Only one run-in figure exists on the map, and it's on the end of the
+  track.** The destination marker carries its name alone. A distance there
+  would be the straight line to it — the very line the turning points exist to
+  avoid, over land, and read as fact by anyone glancing at a screenshot.
 - **Labels are decluttered by hand.** Zoomed out, permanent tooltips sit on
   each other and hang off the edge. `declutter()` keeps them in priority order
   — port, ring crossings, closest approach, track end, reported position — and
