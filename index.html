@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v2.2</title>
+<title>Ship ETA v2.3</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -231,13 +231,17 @@
     background: #081420; border: 1px solid var(--panel-edge); color: var(--ink-dim);
     font-size: 0.74rem; font-weight: 600; letter-spacing: 0.04em;
   }
-  .map-head button.on { background: var(--amber); border-color: var(--amber); color: #1a1204; }
+  .map-head button.on {
+    background: rgba(56,200,232,0.13); border-color: var(--aqua-deep); color: var(--aqua);
+  }
 
   /* Markers are divs so they can be styled with the rest of the app. */
   .pin { display: block; border-radius: 50%; box-sizing: border-box; }
   .pin-dest { width: 16px; height: 16px; background: var(--aqua); border: 2px solid #04121a; }
   .pin-base { width: 14px; height: 14px; background: var(--ok); border: 2px solid #04121a; }
   .pin-old  { width: 10px; height: 10px; background: none; border: 2px dashed var(--ink-dim); }
+  .pin-other { width: 8px; height: 8px; background: var(--ink-dim); opacity: 0.8; }
+  .pin-other.live { background: var(--ok); opacity: 1; }
   .pin-cross { width: 11px; height: 11px; background: #04121a; border: 2px solid var(--aqua); }
   .pin-handle-wrap {
     width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
@@ -334,7 +338,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v2.2</span></h1>
+  <h1>Ship ETA<span class="version">v2.3</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -431,6 +435,7 @@
 <main id="pageMap" style="display:none">
   <section class="panel">
     <div class="map-head">
+      <button id="othersBtn" type="button">Other airfields</button>
       <button id="resetTrackBtn" type="button" style="display:none">Track back to port</button>
       <button id="fitBtn" type="button">Fit everything</button>
     </div>
@@ -774,6 +779,10 @@ if (store.get("shipeta.seedVersion", store.get("shipeta.airfieldsSeeded", false)
 }
 function savePlaces() { store.set("shipeta.places", places); }
 const isField = p => p.type === "airport";
+function icaoOf(p) {
+  const m = /\b(FA[A-Z]{2})\b/i.exec(p.name + " " + (p.note || ""));
+  return m ? m[1].toUpperCase() : p.name.split(" ")[0];
+}
 
 let editing = -1;   // index being edited on the Places tab, -1 = adding
 
@@ -790,6 +799,7 @@ function loadInputs() {
   if (saved.trackTo && isFinite(saved.trackTo.lat) && isFinite(saved.trackTo.lon)) {
     trackTo = { lat: saved.trackTo.lat, lon: saved.trackTo.lon };
   }
+  if (saved.showOthers === false) showOthers = false;   // on unless turned off
 }
 function saveInputs() {
   const out = { assetOpen: $("assetPanel").open };
@@ -797,6 +807,7 @@ function saveInputs() {
   out.dest = $("destSel").value;
   out.air = $("airSel").value;
   out.trackTo = trackTo;
+  out.showOthers = showOthers;
   store.set("shipeta.inputs", out);
 }
 
@@ -877,21 +888,28 @@ function compute() {
   const trackLen = Math.max(distanceNm(now, target), 0.0001);
   const t0 = Date.now();
 
-  /* How far off the AIRFIELD she is, s miles along her track. That's what the
-     rings are about: whether we can reach her, not where she's going. The
-     curve falls to a closest approach and climbs again. */
-  const offField = s => distanceNm(along(now, trackBrg, s), air);
   const hrs = s => speed > 0 ? s / speed : null;
   const point = s => ({ s, hours: hrs(s), at: along(now, trackBrg, s) });
 
-  // Closest point of approach to the airfield: the bottom of that curve.
-  let lo = 0, hi = trackLen;
-  for (let i = 0; i < 60; i++) {
-    const a = lo + (hi - lo) / 3, b = hi - (hi - lo) / 3;
-    if (offField(a) < offField(b)) hi = b; else lo = a;
+  /* How far off a given place she is, s miles along her track. For an airfield
+     that's what the rings are about: whether we can reach her, not where she's
+     going. The curve falls to a closest approach and climbs again, so a
+     ternary search finds the bottom of it. */
+  function approach(centre) {
+    const off = s => distanceNm(along(now, trackBrg, s), centre);
+    let lo = 0, hi = trackLen;
+    for (let i = 0; i < 60; i++) {
+      const a = lo + (hi - lo) / 3, b = hi - (hi - lo) / 3;
+      if (off(a) < off(b)) hi = b; else lo = a;
+    }
+    const p = point((lo + hi) / 2);
+    p.nm = off(p.s);
+    p.off = off;
+    return p;
   }
-  const cpa = point((lo + hi) / 2);
-  cpa.nm = offField(cpa.s);
+
+  const cpa = approach(air);
+  const offField = cpa.off;
 
   // Where her track cuts a ring: on the way in before the closest approach,
   // on the way out after it.
@@ -917,6 +935,19 @@ function compute() {
     };
   });
 
+  /* The same closest approach worked out for every other airfield. Drawn on
+     the map as dotted rings, and it's what says whether somewhere else along
+     the coast is the better place to go from. */
+  const widestRing = legs.reduce((m, l) => Math.max(m, l.ring), 0);
+  const others = places
+    .filter(p => isField(p) && p !== air)
+    .map(p => {
+      const a = approach(p);
+      return { place: p, code: icaoOf(p), nm: a.nm, hours: a.hours, at: a.at,
+               inPlay: widestRing > 0 && a.nm <= widestRing };
+    })
+    .sort((x, y) => x.nm - y.nm);
+
   // She only arrives anywhere if she's actually heading there.
   const arrival = transiting ? null
     : { togo: dist, hours: hrs(dist), at: { lat: dest.lat, lon: dest.lon } };
@@ -929,6 +960,11 @@ function compute() {
     " nm from " + dest.name + " — worth re-reading the coordinates."]);
   if (transiting) notes.push(["good", "Her track is set from the map: she passes " +
     dest.name + " rather than coming in. Times below are for that track."]);
+  /* Worth saying out loud when somewhere else is the shorter flight. */
+  const better = others.find(o => o.nm < cpa.nm - 10);
+  if (better) notes.push(["warn", "She passes " + better.nm.toFixed(0) + " nm off " +
+    better.place.name + ", against " + cpa.nm.toFixed(0) + " nm off " + air.name +
+    ". If you can go from there it's the shorter flight."]);
 
   // Optional flying leg, out of the departure airfield.
   const aSpeed = num("inAsset");
@@ -950,7 +986,8 @@ function compute() {
   }
 
   model = { dest, air, reported, now, moved, age, dist, distAir, distAtReport, brg, speed,
-            legs, notes, asset, t0, transiting, target, trackBrg, trackLen, cpa, arrival };
+            legs, notes, asset, t0, transiting, target, trackBrg, trackLen, cpa, arrival,
+            others };
 }
 
 const pad3 = v => String(Math.round(v) % 360).padStart(3, "0");
@@ -1248,6 +1285,9 @@ let map = null, overlay = null, tilesFailed = false;
 /* Where she's steaming, when it isn't the port. Set by dragging the end of her
    track on the map; null means she's coming straight in. */
 let trackTo = null;
+/* The other airfields' rings, dotted, so you can see at a glance whether
+   somewhere else would be the shorter flight. */
+let showOthers = true;
 
 function ensureMap() {
   if (map) return;
@@ -1370,6 +1410,32 @@ function drawMap(fit) {
   const now = [model.now.lat, model.now.lon];
 
   // Range rings, as circles on the ground around the destination.
+  /* Every other airfield's rings first, dotted and underneath: faint for the
+     ones she never comes near, brighter for the ones she passes inside. */
+  if (showOthers) {
+    model.others.forEach(o => {
+      const c = [o.place.lat, o.place.lon];
+      model.legs.forEach(l => {
+        L.circle(c, {
+          radius: l.ring * 1852, color: "#38c8e8", weight: 1,
+          opacity: o.inPlay ? 0.45 : 0.14, fill: false, dashArray: "2 6"
+        }).addTo(overlay);
+      });
+      const mk = L.marker(c, {
+        icon: L.divIcon({ className: "",
+          html: '<i class="pin pin-other' + (o.inPlay ? " live" : "") + '"></i>',
+          iconSize: [8, 8] }),
+        interactive: false
+      }).addTo(overlay);
+      if (o.inPlay) {
+        labelled(mk, o.code + " \u00B7 " + o.nm.toFixed(0) + " nm", true, "bottom", 6);
+      } else {
+        mk.bindTooltip(o.place.name + " \u00B7 " + o.nm.toFixed(0) + " nm off her",
+          { direction: "top", className: "lbl dim" });
+      }
+    });
+  }
+
   model.legs.forEach(l => {
     L.circle(air, {
       radius: l.ring * 1852, color: "#38c8e8", weight: 1.5,
@@ -1481,6 +1547,9 @@ function fitMap() {
   const widest = model.legs.reduce((m, l) => Math.max(m, l.ring), 0);
   if (widest) b.extend(L.latLng(model.air.lat, model.air.lon).toBounds(widest * 2 * 1852));
   if (model.transiting) b.extend([model.target.lat, model.target.lon]);
+  if (showOthers) model.others.forEach(o => {
+    if (o.inPlay) b.extend([o.place.lat, o.place.lon]);
+  });
   // Room on the right for the destination's label, rather than clipping it.
   map.fitBounds(b, { paddingTopLeft: [70, 44], paddingBottomRight: [90, 50] });
 }
@@ -1673,6 +1742,7 @@ $("pageTabs").addEventListener("click", e => {
   if (page === "calc") render();
   if (page === "map") {
     ensureMap();
+    $("othersBtn").classList.toggle("on", showOthers);
     $("resetTrackBtn").style.display = trackTo ? "" : "none";
     compute();
     // The container had no size until now, so Leaflet has to be told.
@@ -1722,6 +1792,12 @@ $("placesDlg").addEventListener("close", () => {
   render();
 });
 
+$("othersBtn").addEventListener("click", () => {
+  showOthers = !showOthers;
+  $("othersBtn").classList.toggle("on", showOthers);
+  saveInputs();
+  drawMap(false);
+});
 $("resetTrackBtn").addEventListener("click", resetTrack);
 $("fitBtn").addEventListener("click", fitMap);
 

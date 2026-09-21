@@ -53,6 +53,11 @@ package manager.
   pickers, and the distinction is the whole point of the app — don't collapse
   them back into one list. Measuring the rings from the port put the crossing
   points ~9 nm outside the fuel radius on a Cape Town job.
+- **Every airfield gets a closest approach, not just the chosen one.**
+  `model.others` carries one for each, which draws the dotted rings on the map
+  and backs the prompt that names a nearer airfield. It's the same `approach()`
+  used for the selected one, so the two can't drift apart. The prompt only
+  fires at 10 nm better, to stay quiet when it's a wash.
 - **Airfields are offered in coastal order, not storage order.** `FIELD_ORDER`
   runs round the coast from Cape Town and back up the west side, and both the
   picker and the list sort by it, so an old saved list comes out in the same

@@ -36,6 +36,12 @@ FALE, FARB, then FASD and FASB up the west side.
 *Reset built-in places to defaults* puts every one of them back to the position
 it shipped with; anything you added yourself is left alone.
 
+On the map, every *other* airfield's rings are drawn dotted as well, so you can
+see at a glance whether somewhere else along the coast is the shorter flight.
+The ones she actually passes inside are picked out; the rest stay faint. If one
+of them is more than 10 nm closer than the airfield you've chosen, the Calculate
+tab says so. *Other airfields* turns it off.
+
 The seeded port positions are rounded harbour entrances. The seeded airfield
 positions are approximate and **unverified** — check every one against the AIP
 before anyone plans fuel on it, and correct it in the app.
@@ -97,5 +103,5 @@ Bump the version on every functional change, in all four places at once: the
 `<title>`, the `.version` span, `CACHE` in `sw.js`, and *Current* below. It's
 the only way to confirm a deploy actually landed.
 
-Current: **v2.2**. (v1.0 to v1.2 were built before the app moved to its own
+Current: **v2.3**. (v1.0 to v1.2 were built before the app moved to its own
 repository.)
