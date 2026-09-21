@@ -49,6 +49,15 @@ package manager.
   is exactly when it's read. The instant is held in UTC internally and written
   into the field in whichever zone the clock toggle is showing, so flipping the
   toggle rewrites the same moment rather than moving it.
+- **The place lists are folded shut, airfields first.** Settings is mostly
+  things you set once, and sixty lines of coordinates sat between the cog and
+  them. Both lists are `<details>` reset to closed on every open, not just the
+  first, with the count in the summary so a shut fold still says how many. A
+  closed `<details>` keeps its layout box — Chrome hides it with
+  `content-visibility`, not `display: none` — so `offsetParent` and
+  `getBoundingClientRect` both report it visible; test it with
+  `checkVisibility()`.
+
 - **The rings field takes no `inputmode`.** A numeric keypad on a phone has no
   comma, so a field holding "100, 80" can be emptied and then never refilled.
   Any field whose value is a list needs the full keyboard.

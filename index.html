@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.0</title>
+<title>Ship ETA v4.1</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -403,13 +403,40 @@
   }
   .dlg-head h2 { margin: 0; }
 
+  /* A folded list is a heading you can tap. The marker is suppressed and
+     redrawn as a chevron so it sits at the right-hand edge rather than
+     shoving the heading across. */
+  .fold { border-top: 1px solid var(--panel-edge); }
+  .fold > summary {
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer; list-style: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary::after {
+    content: ""; margin-left: auto;
+    width: 7px; height: 7px;
+    border-right: 2px solid var(--ink-dim);
+    border-bottom: 2px solid var(--ink-dim);
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 0.15s;
+  }
+  .fold[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+  .fold > summary:focus-visible { outline: 2px solid var(--aqua); outline-offset: 3px; }
+  .fold .count {
+    font-variant-numeric: tabular-nums; letter-spacing: 0;
+    color: var(--ink-dim); opacity: 0.75;
+  }
+  .fold .count::before { content: "("; }
+  .fold .count::after  { content: ")"; }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.0</span></h1>
+  <h1>Ship ETA<span class="version">v4.1</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -546,17 +573,24 @@
     <button class="ghost" id="dCancel" type="button" style="margin-top:0">Cancel</button>
   </div>
 
-  <h2>Ports</h2>
-  <div id="portList"></div>
+  <!-- Airfields lead: they're the ones with rings and a verification caveat,
+       and the port list is short and rarely touched. Both start closed so the
+       dialog opens on the form rather than on sixty lines of coordinates. -->
+  <details class="fold">
+    <summary><h2>Airfields<span class="count" id="fieldCount"></span></h2></summary>
+    <div id="fieldList"></div>
+    <div class="hint">Turn an airfield’s rings off to keep it off the map — useful where two
+      of them are close enough that their rings sit on top of each other. It stays in the
+      list on the Calculate tab either way, so nothing is dropped from the reckoning.</div>
+    <div class="hint bad">The airfield positions that came with the app are approximate and
+      have not been verified. Check every one against the AIP before anyone plans fuel or a
+      range ring on it, and correct it here.</div>
+  </details>
 
-  <h2>Airfields</h2>
-  <div id="fieldList"></div>
-  <div class="hint">Turn an airfield's rings off to keep it off the map — useful where two
-    of them are close enough that their rings sit on top of each other. It stays in the
-    list on the Calculate tab either way, so nothing is dropped from the reckoning.</div>
-  <div class="hint bad">The airfield positions that came with the app are approximate and
-    have not been verified. Check every one against the AIP before anyone plans fuel or a
-    range ring on it, and correct it here.</div>
+  <details class="fold">
+    <summary><h2>Ports<span class="count" id="portCount"></span></h2></summary>
+    <div id="portList"></div>
+  </details>
 
   <button class="ghost danger" id="dRestore" type="button">Reset built-in places to defaults</button>
   <div class="hint">That puts every built-in port and airfield back to the position it
@@ -1823,9 +1857,11 @@ function renderDestList() {
     if (want) rows = inOrder(rows);
     $(id).innerHTML = rows.map(r => card(r.p, r.i)).join("") ||
       '<div class="empty">Nothing saved yet.</div>';
+    return rows.length;
   };
-  fill("portList", false);
-  fill("fieldList", true);
+  // The count is what a shut fold still tells you.
+  $("fieldCount").textContent = fill("fieldList", true);
+  $("portCount").textContent = fill("portList", false);
 }
 
 function startEdit(i) {
@@ -1931,6 +1967,9 @@ $("results").addEventListener("click", e => {
 $("placesBtn").addEventListener("click", () => {
   resetForm();
   renderDestList();
+  // Closed every time it opens, not just the first, so the settings you came
+  // for are on screen without a scroll.
+  $("placesDlg").querySelectorAll("details.fold").forEach(d => { d.open = false; });
   $("placesDlg").showModal();
   $("placesDlg").scrollTop = 0;
   document.body.style.overflow = "hidden";
