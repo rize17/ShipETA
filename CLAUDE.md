@@ -137,6 +137,12 @@ herself, and it's the quickest way to both check a position and set one.
   track comes inside, violet dashed where it never does. A blue-grey for the
   second kind vanished against OpenStreetMap's water, which is the one
   background most of these rings are drawn on.
+- **Nothing on the map is drawn in one pass.** Every ring, her track and the
+  run she's made since the position report all get a dark casing first and the
+  colour on top. A line that skips it is only visible while the tiles are still
+  dark and vanishes the moment they paint — which reads as "it appears when I
+  zoom or when the tiles refresh", not as "it's the wrong colour". If you add
+  an overlay, case it.
 - **Every ring and her track is drawn twice**, a dark casing first and the
   colour on top, so they read over pale water and dark land alike rather than
   depending on what the tiles happen to be. The tile filter also pulls the
