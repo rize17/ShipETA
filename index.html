@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v3.6</title>
+<title>Ship ETA v3.7</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -237,6 +237,24 @@
     border-radius: 12px; overflow: hidden; border: 1px solid var(--panel-edge);
   }
   #map { width: 100%; height: 100%; background: #08131c; }
+  #mapWrap { position: relative; }
+  /* Her particulars, over the map, so a screenshot carries them. */
+  #shipCard {
+    position: absolute; top: 8px; right: 8px; z-index: 500;
+    background: rgba(8,20,32,0.88); border: 1px solid var(--panel-edge);
+    border-radius: 9px; padding: 6px 9px; pointer-events: none;
+    max-width: 68%; text-align: right;
+  }
+  #shipCard:empty { display: none; }
+  #shipCard .nm {
+    font-size: 0.74rem; font-weight: 700; color: var(--amber);
+    letter-spacing: 0.04em; margin-bottom: 1px;
+  }
+  #shipCard .co {
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 0.66rem; color: var(--ink);
+  }
+  #shipCard .sub { font-size: 0.63rem; color: var(--ink-dim); margin-top: 2px; }
   .leaflet-container { background: #08131c; font-family: inherit; }
   /* Take the glare off a daylight street map sitting in a dark app. */
   /* A daylight street map under a dark overlay. Taking most of the blue out
@@ -286,6 +304,13 @@
     width: 13px; height: 13px; border-radius: 50%;
     background: rgba(232,182,56,0.25); border: 2px dashed var(--amber);
   }
+  /* The bend: faint until you've put one in, solid once you have. */
+  .pin-bend {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: rgba(255,201,60,0.15); border: 2px solid rgba(255,201,60,0.5);
+    box-shadow: 0 0 0 1.5px rgba(4,18,26,0.7);
+  }
+  .pin-bend.set { background: #04121a; border-color: #ffc93c; width: 13px; height: 13px; }
   .pin-ship-wrap {
     width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
     cursor: grab; touch-action: none;
@@ -372,7 +397,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v3.6</span></h1>
+  <h1>Ship ETA<span class="version">v3.7</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -388,12 +413,12 @@
 </header>
 
 <nav class="view-tabs" id="pageTabs">
-  <button class="view-tab active" type="button" data-page="map">Map</button>
-  <button class="view-tab" type="button" data-page="calc">Calculate</button>
+  <button class="view-tab active" type="button" data-page="calc">Calculate</button>
+  <button class="view-tab" type="button" data-page="map">Map</button>
 </nav>
 
 <!-- ======================= CALCULATE ======================= -->
-<main id="pageCalc" style="display:none">
+<main id="pageCalc">
 
   <section class="panel">
     <h2>The job</h2>
@@ -402,6 +427,10 @@
     <select id="destSel"></select>
     <div class="hint mono" id="destEcho"></div>
 
+
+    <label for="inName">Vessel (optional)</label>
+    <input id="inName" placeholder="name or call sign" spellcheck="false">
+    <div class="hint">Shown on the map, so a screenshot says which ship it is.</div>
 
     <label for="inPos">Ship's position</label>
     <input id="inPos" spellcheck="false" autocapitalize="characters"
@@ -460,14 +489,15 @@
 </main>
 
 <!-- ======================= MAP ======================= -->
-<main id="pageMap">
+<main id="pageMap" style="display:none">
   <section class="panel">
     <div class="map-head">
       <button id="fitBtn" type="button">Fit her</button>
       <button id="fitAllBtn" type="button">Fit all airfields</button>
+      <button id="clearWayBtn" type="button" style="display:none">Straighten</button>
       <button id="resetTrackBtn" type="button" style="display:none">Back to port</button>
     </div>
-    <div id="mapWrap"><div id="map"></div></div>
+    <div id="mapWrap"><div id="map"></div><div id="shipCard"></div></div>
     <div class="hint" id="mapNote">Drag the open end of her track to where she's actually
       heading, for when she's passing rather than coming in. Her position comes off the
       Calculate tab, not off this map.</div>
@@ -819,7 +849,7 @@ let editing = -1;   // index being edited on the Places tab, -1 = adding
 
 /* ================= inputs ================= */
 const $ = id => document.getElementById(id);
-const FIELDS = ["inPos", "inSpeed", "inAge", "inRings", "inAsset"];
+const FIELDS = ["inName", "inPos", "inSpeed", "inAge", "inRings", "inAsset"];
 
 function loadInputs() {
   const saved = store.get("shipeta.inputs", {});
@@ -829,12 +859,16 @@ function loadInputs() {
   if (saved.trackTo && isFinite(saved.trackTo.lat) && isFinite(saved.trackTo.lon)) {
     trackTo = { lat: saved.trackTo.lat, lon: saved.trackTo.lon };
   }
+  if (saved.wayPt && isFinite(saved.wayPt.lat) && isFinite(saved.wayPt.lon)) {
+    wayPt = { lat: saved.wayPt.lat, lon: saved.wayPt.lon };
+  }
 }
 function saveInputs() {
   const out = {};
   FIELDS.forEach(f => out[f] = $(f).value);
   out.dest = $("destSel").value;
   out.trackTo = trackTo;
+  out.wayPt = wayPt;
   store.set("shipeta.inputs", out);
 }
 
@@ -882,91 +916,123 @@ function compute() {
   const ship = parseCoords($("inPos").value);
   const speed = num("inSpeed");
   const age = Math.max(0, num("inAge") || 0);
+  const name = $("inName").value.trim();
 
   const notes = [];
   if (!dest) { model = null; return; }
   if (!ship) { model = null; return; }
 
-  /* Where she's actually steaming. Straight at the destination unless a track
-     has been set on the map — the case where she's only passing. */
   const transiting = !!trackTo;
   const target = trackTo || dest;
-
   const reported = { lat: ship.lat, lon: ship.lon };
   const distAtReport = distanceNm(reported, dest);
 
-  // Carry the ship forward from the position report to now, down her track.
-  const runBrg = bearingDeg(reported, target);
-  const run = speed && speed > 0 ? speed * (age / 60) : 0;
-  const now = { lat: reported.lat, lon: reported.lon };
-  let moved = 0;
-  if (run > 0) {
-    moved = Math.min(run, distanceNm(reported, target));
-    const p = along(reported, runBrg, moved);
-    now.lat = p.lat; now.lon = p.lon;
+  /* Her track is a line with an optional bend in it. A ship coming up the east
+     coast has to round the peninsula before she can turn for the port, and a
+     straight line to the port runs over land — so the turning point is dragged
+     onto the corner and everything is measured the way she'll actually steam. */
+  const vertices = [reported].concat(wayPt ? [wayPt] : []).concat([target]);
+  const segs = [];
+  let total = 0;
+  for (let i = 0; i < vertices.length - 1; i++) {
+    const len = distanceNm(vertices[i], vertices[i + 1]);
+    segs.push({ from: vertices[i], to: vertices[i + 1], start: total,
+                len, brg: bearingDeg(vertices[i], vertices[i + 1]) });
+    total += len;
   }
+  total = Math.max(total, 0.0001);
 
+  // s miles along that line from where she was reported.
+  const posOnFull = s => {
+    s = Math.max(0, Math.min(s, total));
+    for (const g of segs) if (s <= g.start + g.len || g === segs[segs.length - 1])
+      return along(g.from, g.brg, s - g.start);
+    return { lat: target.lat, lon: target.lon };
+  };
+  const brgOnFull = s => {
+    for (const g of segs) if (s < g.start + g.len || g === segs[segs.length - 1]) return g.brg;
+    return segs[segs.length - 1].brg;
+  };
+
+  // Carry her forward from the report to now, around the bend if she's past it.
+  const runS = Math.min(speed && speed > 0 ? speed * (age / 60) : 0, total);
+  const now = posOnFull(runS);
+  const moved = runS;
+
+  const trackLen = Math.max(total - runS, 0.0001);
+  const fromNow = s => posOnFull(runS + s);
+  const trackBrg = brgOnFull(runS);
   const dist = distanceNm(now, dest);
   const brg = bearingDeg(now, dest);
-  const trackBrg = bearingDeg(now, target);
-  const trackLen = Math.max(distanceNm(now, target), 0.0001);
   const t0 = Date.now();
 
   const hrs = s => speed > 0 ? s / speed : null;
-  const point = s => ({ s, hours: hrs(s), at: along(now, trackBrg, s) });
+  const point = s => ({ s, hours: hrs(s), at: fromNow(s) });
 
-  /* How far off a given place she is, s miles along her track: the curve falls
-     to a closest approach and climbs again, so a ternary search finds the
-     bottom of it. */
-  function approach(centre) {
-    const off = s => distanceNm(along(now, trackBrg, s), centre);
-    let lo = 0, hi = trackLen;
-    for (let i = 0; i < 60; i++) {
+  /* With a bend in the track, how far off an airfield she is no longer falls
+     and then rises just once — she can close, turn away, and close again. So
+     the track is sampled end to end and the sampling is what finds the
+     closest approach and every ring crossing; a hill-climb would settle on
+     whichever dip it happened to start in. */
+  const SAMPLES = 360;
+  function analyse(centre) {
+    const step = trackLen / SAMPLES;
+    const off = s => distanceNm(fromNow(s), centre);
+    const d = new Array(SAMPLES + 1);
+    for (let i = 0; i <= SAMPLES; i++) d[i] = off(i * step);
+    let mi = 0;
+    for (let i = 1; i <= SAMPLES; i++) if (d[i] < d[mi]) mi = i;
+    let lo = Math.max(0, (mi - 1) * step), hi = Math.min(trackLen, (mi + 1) * step);
+    for (let k = 0; k < 40; k++) {
       const a = lo + (hi - lo) / 3, b = hi - (hi - lo) / 3;
       if (off(a) < off(b)) hi = b; else lo = a;
     }
-    const p = point((lo + hi) / 2);
-    p.nm = off(p.s);
-    p.off = off;
-    return p;
+    const cpa = point((lo + hi) / 2);
+    cpa.nm = off(cpa.s);
+    return { d, step, off, cpa };
   }
 
-  // Where her track cuts a ring, between two points either side of it.
-  const cut = (off, r, from, to) => {
-    let a = from, b = to;
-    for (let i = 0; i < 60; i++) {
-      const m = (a + b) / 2;
-      if ((off(a) - r) * (off(m) - r) <= 0) b = m; else a = m;
+  // Every time the line cuts a given radius, in or out, in track order.
+  function cuts(an, r) {
+    const out = [];
+    for (let i = 0; i < SAMPLES; i++) {
+      const a = an.d[i] - r, b = an.d[i + 1] - r;
+      if ((a <= 0) === (b <= 0)) continue;
+      let lo = i * an.step, hi = (i + 1) * an.step;
+      for (let k = 0; k < 40; k++) {
+        const m = (lo + hi) / 2;
+        if ((an.off(lo) - r) * (an.off(m) - r) <= 0) hi = m; else lo = m;
+      }
+      const c = point((lo + hi) / 2);
+      c.into = a > 0;          // was outside a moment ago, inside now
+      out.push(c);
     }
-    return point((a + b) / 2);
-  };
+    return out;
+  }
 
   const ringList = rings();
   const aSpeed = num("inAsset");
 
-  /* Every airfield, every ring: when she cuts it, how far she has to run to
-     get there, and — since the crossing is by definition that ring's distance
-     from its own airfield — the latest you could lift from it and be there.
-     No airfield is picked for you; the list is the options. */
   const fields = places.filter(isField).map(pl => {
-    const cpa = approach(pl);
+    const an = analyse(pl);
     const distNow = distanceNm(now, pl);
-    const endsInside = r => cpa.off(trackLen) <= r;
     const legs = ringList.map(r => {
       const insideNow = distNow <= r;
-      const misses = cpa.nm > r;
-      const entry = (misses || insideNow) ? null : cut(cpa.off, r, 0, cpa.s);
+      const cr = cuts(an, r);
+      const entry = cr.find(c => c.into) || null;
+      const exit = cr.find(c => !c.into && (!entry || c.s > entry.s)) || null;
       return {
-        ring: r, insideNow, misses, entry,
-        exit: (misses || endsInside(r)) ? null : cut(cpa.off, r, cpa.s, trackLen),
-        openEnded: !misses && endsInside(r),
+        ring: r, insideNow, misses: an.cpa.nm > r,
+        crossings: cr, entry, exit,
+        openEnded: an.cpa.nm <= r && an.d[SAMPLES] <= r,
+        passes: cr.filter(c => c.into).length,
         flyH: aSpeed > 0 ? r / aSpeed : null,
         liftH: (entry && entry.hours != null && aSpeed > 0) ? entry.hours - r / aSpeed : null
       };
     });
     const times = legs.filter(l => l.entry && l.entry.hours != null).map(l => l.entry.hours);
     return {
-      place: pl, code: icaoOf(pl), cpa, distNow, legs,
+      place: pl, code: icaoOf(pl), cpa: an.cpa, distNow, legs,
       shown: !pl.hidden,
       reachable: legs.some(l => l.entry || l.insideNow),
       insideNow: legs.some(l => l.insideNow),
@@ -979,9 +1045,10 @@ function compute() {
   const inRange = fields.filter(f => f.reachable).sort((a, b) => rank(a) - rank(b) || a.cpa.nm - b.cpa.nm);
   const outOfRange = fields.filter(f => !f.reachable).sort((a, b) => a.cpa.nm - b.cpa.nm);
 
-  // She only arrives anywhere if she's actually heading there.
+  /* She arrives at the end of the line, so her run in is the distance round
+     the bend, not the straight line the bend exists to avoid. */
   const arrival = transiting ? null
-    : { togo: dist, hours: hrs(dist), at: { lat: dest.lat, lon: dest.lon } };
+    : { togo: trackLen, hours: hrs(trackLen), at: { lat: dest.lat, lon: dest.lon } };
 
   if (speed == null || speed <= 0) notes.push(["warn", "Enter the ship's speed to get times."]);
   else if (speed > 40) notes.push(["warn", speed.toFixed(1) + " kt is fast for a ship — check it."]);
@@ -991,20 +1058,20 @@ function compute() {
     " nm from " + dest.name + " — worth re-reading the coordinates."]);
   if (transiting) notes.push(["good", "Her track is set from the map: she passes " +
     dest.name + " rather than coming in. Times below are for that track."]);
+  if (wayPt) notes.push(["good", "Turning point set: she's taken round it, " +
+    trackLen.toFixed(1) + " nm to run against " +
+    distanceNm(now, target).toFixed(1) + " nm straight."]);
   if (!fields.length) notes.push(["bad", "No airfields saved \u2014 add them under the cog."]);
   else if (!inRange.length) notes.push(["warn", "She never comes inside " +
     (ringList[0] || 0) + " nm of any airfield on this track. The nearest she gets is " +
     (outOfRange[0] ? outOfRange[0].cpa.nm.toFixed(0) + " nm off " + outOfRange[0].place.name : "\u2014") + "."]);
 
-  /* Airfields whose rings are turned off in the cog stay out of the map and
-     the strip beneath it — the point is to unclutter a coast where two of them
-     are twenty miles apart. They stay in the list on the Calculate tab, so
-     turning one off never quietly drops it from the reckoning. */
   const fieldsShown = fields.filter(f => f.shown);
   const inRangeShown = inRange.filter(f => f.shown);
 
-  model = { dest, reported, now, moved, age, dist, distAtReport, brg, speed, aSpeed,
-            notes, t0, transiting, target, trackBrg, trackLen, arrival,
+  model = { name, dest, reported, now, moved, age, dist, distAtReport, brg, speed, aSpeed,
+            notes, t0, transiting, target, trackBrg, trackLen, arrival, fromNow,
+            vertices, segs, runS, total,
             fields, inRange, outOfRange, ringList, fieldsShown, inRangeShown };
 }
 
@@ -1071,7 +1138,8 @@ function renderResults() {
   // Headline: how far off the port she is, and what happens next.
   html.push('<div class="headline">');
   html.push('<div class="k">Distance to ' + esc(model.dest.name) + "</div>");
-  html.push('<div class="big">' + model.dist.toFixed(1) + "<small>nm</small></div>");
+  html.push('<div class="big">' +
+    (model.arrival ? model.arrival.togo : model.dist).toFixed(1) + "<small>nm</small></div>");
   if (model.arrival && model.arrival.hours != null) {
     html.push('<div class="sub">Alongside <b>' + fmtClock(at(model.arrival.hours), true) +
       "</b> \u00B7 " + fmtRun(model.arrival.hours) + " at " + model.speed.toFixed(1) + " kt</div>");
@@ -1168,6 +1236,10 @@ let map = null, overlay = null, tilesFailed = false;
 /* Where she's steaming, when it isn't the port. Set by dragging the end of her
    track on the map; null means she's coming straight in. */
 let trackTo = null;
+/* An optional bend in her track. A ship coming up from the east has to round
+   the peninsula before she can turn for the port, and the straight line runs
+   over land. */
+let wayPt = null;
 
 
 function ensureMap() {
@@ -1217,6 +1289,14 @@ function setTrackFromMap(lat, lon) {
   saveInputs();
   render();
   $("resetTrackBtn").style.display = "";
+}
+
+function setWayPoint(lat, lon) {
+  wayPt = lat == null ? null : { lat, lon };
+  saveInputs();
+  render();
+  drawMap(false);
+  $("clearWayBtn").style.display = wayPt ? "" : "none";
 }
 
 function resetTrack() {
@@ -1294,6 +1374,7 @@ function drawMap(fit) {
   overlay.clearLayers();
   labelRefs = [];
   renderMapSummary();
+  renderShipCard();
   if (!model) { noteMap(); return; }
 
   const dest = [model.dest.lat, model.dest.lon];
@@ -1337,11 +1418,20 @@ function drawMap(fit) {
 
   /* Her track, sampled along the same great circle the ETAs are worked on —
      a straight line on a Mercator map is not that path. */
+  /* Sampled per leg rather than across the whole line, so the turning point
+     is a vertex on the drawn track instead of a corner cut by whichever
+     sample happened to land nearest it. */
   const pts = [];
-  for (let i = 0; i <= 64; i++) {
-    const p = along(model.now, model.trackBrg, model.trackLen * i / 64);
-    pts.push([p.lat, p.lon]);
-  }
+  model.segs.forEach(g => {
+    const end = g.start + g.len;
+    if (end <= model.runS) return;                 // already behind her
+    const from = Math.max(g.start, model.runS);
+    const n = Math.max(8, Math.round((end - from) / 4));
+    for (let i = 0; i <= n; i++) {
+      const p = along(g.from, g.brg, (from - g.start) + (end - from) * i / n);
+      pts.push([p.lat, p.lon]);
+    }
+  });
   L.polyline(pts, { color: "#04121a", weight: 5, opacity: 0.45 }).addTo(overlay);
   L.polyline(pts, { color: "#ffc93c", weight: 2.4, opacity: 1 }).addTo(overlay);
 
@@ -1397,7 +1487,8 @@ function drawMap(fit) {
   });
 
   // The port she's heading for.
-  const destLabel = model.dest.name + "<br>" + model.dist.toFixed(1) + " nm" +
+  const destLabel = model.dest.name + "<br>" +
+    (model.arrival ? model.arrival.togo : model.dist).toFixed(1) + " nm" +
     (model.arrival && model.arrival.hours != null
       ? " \u00B7 " + fmtClock(at(model.arrival.hours), true) : "");
   labelled(L.marker(dest, {
@@ -1408,14 +1499,37 @@ function drawMap(fit) {
   /* The ship is drawn where her coordinates put her and is not draggable —
      her position comes off MarineTraffic, never off this map. */
   L.marker(now, {
-    interactive: false,
+    interactive: true,
     icon: L.divIcon({
       className: "",
       html: '<span class="pin-ship-wrap" style="transform:rotate(' +
             (model.trackBrg - 90).toFixed(1) + 'deg)"><i class="pin pin-ship"></i></span>',
       iconSize: [30, 30], iconAnchor: [15, 15]
     })
+  }).addTo(overlay)
+    .bindTooltip("tap to edit her position", { direction: "top", className: "lbl dim" })
+    .on("click", () => showPage("calc"));
+
+  /* Drag the middle of the line to bend it round a headland; drag the bend
+     again to move it. Without one the handle sits at the halfway mark, faint,
+     the way a route is reshaped on any map. */
+  const midS = model.trackLen / 2;
+  const bend = wayPt ? [wayPt.lat, wayPt.lon]
+                     : (p => [p.lat, p.lon])(model.fromNow(midS));
+  const bendMk = L.marker(bend, {
+    draggable: true, autoPan: true,
+    icon: L.divIcon({ className: "",
+      html: '<span class="pin-handle-wrap"><i class="pin pin-bend' +
+            (wayPt ? " set" : "") + '"></i></span>',
+      iconSize: [30, 30], iconAnchor: [15, 15] })
   }).addTo(overlay);
+  bendMk.bindTooltip(wayPt ? "turning point \u2014 drag to move"
+                           : "drag to bend her track round a headland",
+    { direction: "top", className: "lbl dim" });
+  bendMk.on("dragend", e => {
+    const ll = e.target.getLatLng();
+    setWayPoint(ll.lat, ll.lng);
+  });
 
   /* The open end of her track is the handle: drag it to where she's really
      heading when she's passing rather than coming in. */
@@ -1475,6 +1589,19 @@ function fitMap(all) {
   map.fitBounds(b, { paddingTopLeft: [padX, 38], paddingBottomRight: [padX, 46] });
 }
 
+function renderShipCard() {
+  const box = $("shipCard");
+  if (!model) { box.innerHTML = ""; return; }
+  const bits = [];
+  if (model.name) bits.push('<div class="nm">' + esc(model.name) + "</div>");
+  bits.push('<div class="co">' + fmtDDM(model.now) + "</div>");
+  const sub = [];
+  if (model.speed > 0) sub.push(model.speed.toFixed(1) + " kt");
+  sub.push(model.age > 0 ? "reported " + fmtRun(model.age / 60) + " ago" : "position as given");
+  bits.push('<div class="sub">' + esc(sub.join(" \u00B7 ")) + "</div>");
+  box.innerHTML = bits.join("");
+}
+
 function renderMapSummary() {
   const box = $("mapSummary");
   if (!model) {
@@ -1512,7 +1639,7 @@ function briefText() {
   const L = [];
   const stamp = fmtClock(new Date(model.t0), false);
   L.push("SHIP ETA — worked at " + stamp + " " + tzLabel());
-  L.push("Vessel   " + fmtDDM(model.now) +
+  L.push("Vessel   " + (model.name ? model.name + "  " : "") + fmtDDM(model.now) +
     (model.moved > 0 ? "  (from a position " + fmtRun(model.age / 60) + " old)" : ""));
   L.push("Dest     " + model.dest.name + "  " + fmtDDM(model.dest));
 
@@ -1655,24 +1782,28 @@ loadInputs();
 renderDestSelects();
 renderDestList();
 
-$("pageTabs").addEventListener("click", e => {
-  const b = e.target.closest(".view-tab");
-  if (!b) return;
-  document.querySelectorAll(".view-tab").forEach(t => t.classList.toggle("active", t === b));
-  const page = b.dataset.page;
+function showPage(page) {
+  document.querySelectorAll(".view-tab").forEach(t =>
+    t.classList.toggle("active", t.dataset.page === page));
   $("pageCalc").style.display = page === "calc" ? "" : "none";
   $("pageMap").style.display = page === "map" ? "" : "none";
   if (page === "calc") render();
   if (page === "map") {
     ensureMap();
     $("resetTrackBtn").style.display = trackTo ? "" : "none";
+    $("clearWayBtn").style.display = wayPt ? "" : "none";
     compute();
     // The container had no size until now, so Leaflet has to be told.
     setTimeout(() => drawMap(true), 0);
   }
+}
+
+$("pageTabs").addEventListener("click", e => {
+  const b = e.target.closest(".view-tab");
+  if (b) showPage(b.dataset.page);
 });
 
-["inPos", "inSpeed", "inAge", "inRings", "inAsset"].forEach(id =>
+["inName", "inPos", "inSpeed", "inAge", "inRings", "inAsset"].forEach(id =>
   $(id).addEventListener("input", () => { saveInputs(); render(); }));
 ["destSel"].forEach(id =>
   $(id).addEventListener("change", () => { saveInputs(); render(); }));
@@ -1713,6 +1844,7 @@ $("placesDlg").addEventListener("close", () => {
   render();
 });
 
+$("clearWayBtn").addEventListener("click", () => setWayPoint(null));
 $("resetTrackBtn").addEventListener("click", resetTrack);
 $("fitBtn").addEventListener("click", () => fitMap(false));
 $("fitAllBtn").addEventListener("click", () => fitMap(true));
