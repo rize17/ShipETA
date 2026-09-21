@@ -42,6 +42,9 @@ package manager.
   back whichever form the person on the radio is using without converting
   anything by hand. The hemisphere letter carries the sign, so the number
   never does as well — no `-34.9705° S`.
+- **The rings field takes no `inputmode`.** A numeric keypad on a phone has no
+  comma, so a field holding "100, 80" can be emptied and then never refilled.
+  Any field whose value is a list needs the full keyboard.
 - **The ship is met on a range ring, nowhere else.** Rings default to 100 and
   80 nm — the outer limit and the range normally flown. Don't reintroduce a
   "meet her wherever the arithmetic lands" figure; it offers something that
