@@ -60,6 +60,13 @@ package manager.
   Adding an airfield in a later release means bumping `SEED_VERSION`, which
   adds the missing ones once — a plain "have we seeded" flag would never
   deliver them to anyone already using the app.
+- **The places dialog is positioned by hand.** A browser centres a modal
+  `<dialog>` with `margin: auto` against `inset: 0`, and the `* { margin: 0 }`
+  reset at the top of the stylesheet takes that away — which pins it to the top
+  left corner, half of it behind a phone's status bar. The rule sets
+  `position: fixed; inset: 0; margin: auto` explicitly, and `dlgpos.js` checks
+  it lands on screen and centred across six viewport shapes. Don't drop those
+  properties on the assumption the default handles it.
 - **Places live behind the cog, not in a tab.** They're set once and then left;
   giving them a third of the tab bar spent the app's most valuable space on its
   least used screen.

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v2.1</title>
+<title>Ship ETA v2.2</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -295,15 +295,37 @@
   dialog {
     background: var(--panel); color: var(--ink);
     border: 1px solid var(--panel-edge); border-radius: 16px;
-    width: min(94vw, 470px); max-height: 86vh; padding: 16px;
+    /* A browser centres a modal dialog with margin:auto against inset:0, and
+       the `* { margin: 0 }` at the top of this stylesheet takes that away —
+       which pins it to the top left corner, half of it behind the status bar.
+       Position it explicitly rather than relying on the default. */
+    position: fixed; inset: 0; margin: auto;
+    width: min(94vw, 470px);
+    max-height: 86vh;
+    max-height: 86dvh;        /* mobile: excludes the browser's own chrome */
+    /* No padding at the top: the sticky header below supplies it, so that
+       nothing scrolls through a gap above it. */
+    padding: 0 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
     overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
   dialog::backdrop { background: rgba(3,9,14,0.78); }
   dialog h2 {
     font-size: 0.7rem; letter-spacing: 0.18em; text-transform: uppercase;
     color: var(--ink-dim); font-weight: 600; margin: 22px 0 10px;
   }
-  .dlg-head { display: flex; justify-content: space-between; align-items: center; }
+  /* Done stays reachable however far down the list you are. */
+  .dlg-head {
+    display: flex; justify-content: space-between; align-items: center;
+    position: sticky; top: 0; z-index: 2;
+    background: var(--panel);
+    /* Full bleed, so the list passes underneath it rather than beside it. */
+    margin: 0 -16px 4px; padding: 0 16px 10px;
+    padding-top: max(14px, env(safe-area-inset-top));
+    border-bottom: 1px solid var(--panel-edge);
+  }
   .dlg-head h2 { margin: 0; }
 
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -312,7 +334,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v2.1</span></h1>
+  <h1>Ship ETA<span class="version">v2.2</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -1685,9 +1707,20 @@ $("placesBtn").addEventListener("click", () => {
   resetForm();
   renderDestList();
   $("placesDlg").showModal();
+  $("placesDlg").scrollTop = 0;
+  document.body.style.overflow = "hidden";
 });
 $("placesClose").addEventListener("click", () => $("placesDlg").close());
-$("placesDlg").addEventListener("close", () => { renderDestSelects(); render(); });
+/* A tap on the backdrop lands on the dialog element itself rather than
+   anything inside it, which is the usual way out on a phone. */
+$("placesDlg").addEventListener("click", e => {
+  if (e.target === $("placesDlg")) $("placesDlg").close();
+});
+$("placesDlg").addEventListener("close", () => {
+  document.body.style.overflow = "";
+  renderDestSelects();
+  render();
+});
 
 $("resetTrackBtn").addEventListener("click", resetTrack);
 $("fitBtn").addEventListener("click", fitMap);
