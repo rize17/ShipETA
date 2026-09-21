@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v3.1</title>
+<title>Ship ETA v3.2</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -236,7 +236,10 @@
   #map { width: 100%; height: 100%; background: #08131c; }
   .leaflet-container { background: #08131c; font-family: inherit; }
   /* Take the glare off a daylight street map sitting in a dark app. */
-  .leaflet-tile { filter: brightness(0.78) saturate(0.8) contrast(1.05); }
+  /* A daylight street map under a dark overlay. Taking most of the blue out
+     of the sea matters as much as dimming it: rings drawn over water were
+     landing in almost the same colour as the water. */
+  .leaflet-tile { filter: brightness(0.66) saturate(0.5) contrast(1.1); }
   .leaflet-bar a, .leaflet-control-attribution {
     background: #0d1f2d; color: var(--ink-dim); border-color: var(--panel-edge);
   }
@@ -259,10 +262,10 @@
   .pin-base { width: 14px; height: 14px; background: var(--ok); border: 2px solid #04121a; }
   .pin-old  { width: 10px; height: 10px; background: none; border: 2px dashed var(--ink-dim); }
   .pin-other {
-    width: 9px; height: 9px; background: #8aa6bb; opacity: 0.9;
-    border: 1px solid #04121a;
+    width: 10px; height: 10px; background: #c9a7f5; opacity: 1;
+    border: 2px solid #04121a;
   }
-  .pin-other.live { background: var(--ok); opacity: 1; border-color: #04121a; }
+  .pin-other.live { background: var(--ok); border-color: #04121a; }
   .pin-cross { width: 11px; height: 11px; background: #04121a; border: 2px solid var(--aqua); }
   .pin-handle-wrap {
     width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
@@ -359,7 +362,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v3.1</span></h1>
+  <h1>Ship ETA<span class="version">v3.2</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -1184,7 +1187,7 @@ function noteMap(text, kind) {
   el.textContent = text || (trackTo
     ? "Her track is set by hand \u2014 she passes the port rather than coming in. " +
       "Drag the open end again to adjust it, or put it back to the port."
-    : "Aqua rings are airfields she comes into range of; slate ones she never does. " +
+    : "Aqua rings are airfields she comes into range of; violet ones she never does. " +
       "Drag the open end of her track to where she's actually heading, for when she's " +
       "passing rather than coming in \u2014 her position comes off the Calculate tab.");
 }
@@ -1279,15 +1282,20 @@ function drawMap(fit) {
     const c = [f.place.lat, f.place.lon];
     const live = f.reachable;
     f.legs.forEach(l => {
-      L.circle(c, {
-        // Aqua where she comes into range, slate where she never does.
-        radius: l.ring * 1852,
-        color: live ? "#38c8e8" : "#8aa6bb",
-        weight: live ? 1.8 : 1.3,
-        opacity: live ? (l.misses ? 0.5 : 0.95) : 0.55,
-        fill: false,
-        dashArray: live ? (l.misses ? "6 5" : null) : "5 7"
-      }).addTo(overlay);
+      /* Aqua where she comes into range, violet where she never does — not two
+         blues, since what's behind them is the sea. Each ring is drawn twice:
+         a dark casing first, then the colour on top, so it reads over pale
+         water and dark land alike. */
+      const dash = live ? (l.misses ? "6 5" : null) : "5 7";
+      const w = live ? 1.8 : 1.6;
+      const opts = { radius: l.ring * 1852, fill: false, dashArray: dash };
+      L.circle(c, Object.assign({}, opts,
+        { color: "#04121a", weight: w + 3, opacity: 0.45 })).addTo(overlay);
+      L.circle(c, Object.assign({}, opts, {
+        color: live ? "#4ddcff" : "#c9a7f5",
+        weight: w,
+        opacity: live ? (l.misses ? 0.65 : 1) : 0.9
+      })).addTo(overlay);
     });
     const mk = L.marker(c, {
       icon: L.divIcon({ className: "",
@@ -1312,7 +1320,8 @@ function drawMap(fit) {
     const p = along(model.now, model.trackBrg, model.trackLen * i / 64);
     pts.push([p.lat, p.lon]);
   }
-  L.polyline(pts, { color: "#e8b638", weight: 2, opacity: 0.85 }).addTo(overlay);
+  L.polyline(pts, { color: "#04121a", weight: 5, opacity: 0.45 }).addTo(overlay);
+  L.polyline(pts, { color: "#ffc93c", weight: 2.4, opacity: 1 }).addTo(overlay);
 
   // Where she was when the position was reported, if it wasn't just now.
   if (model.moved > 0.05) {

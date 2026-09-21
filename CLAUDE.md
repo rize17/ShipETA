@@ -133,10 +133,16 @@ herself, and it's the quickest way to both check a position and set one.
   zoom forced a repaint, which reads as "the rings only appear when I zoom".
   The map is built with `L.svg({ padding: 2 })`; don't remove it. `rings.js`
   counts the painted paths on a first draw with no zoom touched.
-- **Two ring colours, both legible.** Aqua where her track comes inside,
-  slate dashed where it never does. Faint-and-grey for the second kind was
-  invisible on a phone in daylight — being able to see where the other
-  airfields are is the reason they're drawn at all.
+- **Two ring colours, neither of them the colour of the sea.** Aqua where her
+  track comes inside, violet dashed where it never does. A blue-grey for the
+  second kind vanished against OpenStreetMap's water, which is the one
+  background most of these rings are drawn on.
+- **Every ring and her track is drawn twice**, a dark casing first and the
+  colour on top, so they read over pale water and dark land alike rather than
+  depending on what the tiles happen to be. The tile filter also pulls the
+  saturation down, which takes the blue out of the sea. Test with
+  `seatest.js`, which serves a solid tile in OSM's water and land colours —
+  a blank stand-in tile hides exactly this class of problem.
 - **Fit padding is proportional.** A fixed 160px swallowed nearly half the
   width of a phone and cost a whole zoom level. It's a percentage now, floored
   and capped.
