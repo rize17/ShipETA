@@ -124,9 +124,23 @@ The page the app opens on, built on the vendored Leaflet. It plots the destinati
 rings as circles on the ground, her track in, the ring crossings and the ship
 herself, and it's the quickest way to both check a position and set one.
 
-- **The track is drawn as a great circle**, sampled at 64 points along the same
-  path the ETAs are worked on. A straight line between two points on a Mercator
-  map is a different path — don't "simplify" it to a two-point polyline.
+- **Her track is a line with an optional bend in it.** A ship coming up the
+  east coast rounds the peninsula before turning for the port, so a straight
+  line to it runs over land and every figure taken off that line is wrong.
+  The turning point is a vertex: distances, ETAs and ring crossings are all
+  measured along the legs, and the arrival is the run round the bend, not the
+  straight line the bend exists to avoid. Anything showing a distance to the
+  destination uses `arrival.togo`, never `dist`.
+- **The bend breaks the one-minimum assumption.** With a corner in the track,
+  how far off an airfield she is can fall, rise and fall again, so a hill-climb
+  settles in whichever dip it started in. `analyse()` samples the whole track
+  and refines from the sampled minimum; `cuts()` takes every sign change rather
+  than assuming one way in and one way out. Don't put the ternary search back.
+- **The track is drawn leg by leg**, each sampled along its own great circle,
+  so the turning point is a vertex on the drawn line rather than a corner cut
+  by whichever sample landed nearest. A straight line between two points on a
+  Mercator map is a different path again — don't "simplify" any of it to a
+  two-point polyline.
 - **The map never moves the ship.** Her position is transcribed from
   MarineTraffic on the Calculate tab and that is the only place it comes from.
   The one draggable thing is the open end of her track.
