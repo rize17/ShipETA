@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.4</title>
+<title>Ship ETA v4.5</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -114,7 +114,9 @@
     text-transform: none; margin-left: 4px;
   }
   .taken-row { display: flex; gap: 8px; align-items: stretch; }
-  .taken-row input { flex: 1; min-width: 0; }
+  .taken-row input, .taken-row select { flex: 1; min-width: 0; }
+  .taken-row button.done { color: var(--ok); border-color: var(--ok); }
+  .taken-row button:disabled { opacity: 0.4; cursor: default; }
   .taken-row button {
     flex: 0 0 auto; padding: 0 14px; border-radius: 8px; cursor: pointer;
     background: #081420; border: 1px solid var(--panel-edge); color: var(--aqua);
@@ -466,7 +468,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.4</span></h1>
+  <h1>Ship ETA<span class="version">v4.5</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -491,6 +493,16 @@
 
   <section class="panel">
     <h2>The job</h2>
+
+    <label for="shipSel">Saved ship</label>
+    <div class="taken-row">
+      <select id="shipSel"></select>
+      <button id="shipSave" type="button">Save</button>
+      <button id="shipDel" type="button">Delete</button>
+    </div>
+    <div class="hint">Save her once and the whole job comes back next time — position,
+      speed, course, destination and any turning points — so only what’s changed needs
+      retyping. Saving again under the same name updates her.</div>
 
     <label for="inName">Vessel (optional)</label>
     <input id="inName" placeholder="name or call sign" spellcheck="false">
@@ -1188,6 +1200,13 @@ function compute() {
   if (takenAt != null && takenAt > Date.now() + 60000)
     notes.push(["warn", "That position time is in the future \u2014 check it, and whether " +
       "you meant " + (useUTC ? "local time" : "UTC") + "."]);
+  /* Loading a saved ship brings back the position time she was saved with,
+     and the reckoning will carry her forward from it however old it is. Left
+     unsaid, a day-old position quietly becomes a 300-mile guess. */
+  if (takenAt != null && age > 12 * 60)
+    notes.push(["warn", "That position is " + fmtRun(age / 60) + " old \u2014 she's been " +
+      "carried " + Math.round(speed > 0 ? speed * age / 60 : 0) + " nm on paper since. " +
+      "Get a fresh one off MarineTraffic before you rely on this."]);
   if (num("inCourse") != null && course == null)
     notes.push(["warn", "A course is 000 to 360 degrees — that one's been ignored."]);
   if (ship.lat > 0) notes.push(["warn", "That latitude is north of the equator. " +
@@ -2002,10 +2021,125 @@ function saveDest() {
   render();
 }
 
+
+/* ---------- saved ships ---------- */
+/* A ship is a whole job kept under her name: position, speed, course, when
+   that position was taken, where she's heading and any turning points. Only
+   one is worked at a time, so this is a pre-fill and not a set of parallel
+   slates - loading her overwrites what's on screen.
+
+   The destination is held by NAME rather than by its index into places[].
+   The index is what the select uses, but it shifts the moment a port is
+   added or deleted, which would silently repoint a saved ship at a different
+   harbour - the quietest kind of wrong answer this app could give. */
+let ships = [];
+
+function loadShips() {
+  const raw = store.get("shipeta.ships", []);
+  ships = Array.isArray(raw) ? raw.filter(s => s && typeof s.name === "string" && s.name) : [];
+}
+function saveShips() { store.set("shipeta.ships", ships); }
+
+function renderShipSel(keepName) {
+  const sel = $("shipSel");
+  const want = keepName != null ? keepName : sel.value;
+  sel.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = ships.length ? "\u2014 not a saved ship \u2014" : "\u2014 none saved yet \u2014";
+  sel.appendChild(none);
+  ships.forEach(s => {
+    const o = document.createElement("option");
+    o.value = s.name; o.textContent = s.name;
+    sel.appendChild(o);
+  });
+  sel.value = ships.some(s => s.name === want) ? want : "";
+  $("shipDel").disabled = !sel.value;
+}
+
+/* Keeps the picker honest about what's on screen: type over the name and she
+   is no longer the saved ship, so Delete stops offering to remove her. */
+function syncShipSel() {
+  const sel = $("shipSel");
+  const name = $("inName").value.trim();
+  sel.value = ships.some(s => s.name === name) ? name : "";
+  $("shipDel").disabled = !sel.value;
+}
+
+function currentShip() {
+  const dest = places[parseInt($("destSel").value, 10)];
+  return {
+    name: $("inName").value.trim(),
+    pos: $("inPos").value,
+    speed: $("inSpeed").value,
+    course: $("inCourse").value,
+    takenAt: takenAt,
+    dest: dest ? dest.name : null,
+    wayPts: wayPts.map(w => ({ lat: w.lat, lon: w.lon })),
+    trackTo: trackTo ? { lat: trackTo.lat, lon: trackTo.lon } : null
+  };
+}
+
+function applyShip(s) {
+  $("inName").value = s.name || "";
+  $("inPos").value = s.pos || "";
+  $("inSpeed").value = s.speed || "";
+  $("inCourse").value = s.course || "";
+  takenAt = isFinite(s.takenAt) ? s.takenAt : null;
+  takenToField();
+  const i = places.findIndex(p => !isField(p) && p.name === s.dest);
+  if (i >= 0) $("destSel").value = String(i);
+  wayPts = (Array.isArray(s.wayPts) ? s.wayPts : [])
+    .filter(w => w && isFinite(w.lat) && isFinite(w.lon))
+    .map(w => ({ lat: w.lat, lon: w.lon })).slice(0, 4);
+  trackTo = (s.trackTo && isFinite(s.trackTo.lat) && isFinite(s.trackTo.lon))
+    ? { lat: s.trackTo.lat, lon: s.trackTo.lon } : null;
+  saveInputs();
+  render();
+}
+
+/* Brief confirmation on the button itself - there's nowhere else to put it. */
+function flash(btn, text) {
+  const was = btn.textContent;
+  btn.textContent = text;
+  btn.classList.add("done");
+  setTimeout(() => { btn.textContent = was; btn.classList.remove("done"); }, 1500);
+}
+
 /* ================= wiring ================= */
 loadInputs();
 renderDestSelects();
 renderDestList();
+loadShips();
+/* Shows her as the selected ship when the job on screen is one that's saved. */
+renderShipSel($("inName").value.trim());
+
+$("shipSel").addEventListener("change", () => {
+  const s = ships.find(x => x.name === $("shipSel").value);
+  if (s) applyShip(s);
+  $("shipDel").disabled = !$("shipSel").value;
+});
+
+$("shipSave").addEventListener("click", () => {
+  const name = $("inName").value.trim();
+  if (!name) { flash($("shipSave"), "Name her first"); $("inName").focus(); return; }
+  const at = ships.findIndex(s => s.name.toLowerCase() === name.toLowerCase());
+  const rec = currentShip();
+  if (at >= 0) ships[at] = rec; else ships.push(rec);
+  ships.sort((a, b) => a.name.localeCompare(b.name));
+  saveShips();
+  renderShipSel(name);
+  flash($("shipSave"), at >= 0 ? "Updated" : "Saved");
+});
+
+$("shipDel").addEventListener("click", () => {
+  const name = $("shipSel").value;
+  if (!name) return;
+  if (!confirm("Forget " + name + "? What's on screen stays \u2014 only the saved copy goes.")) return;
+  ships = ships.filter(s => s.name !== name);
+  saveShips();
+  renderShipSel("");
+});
 
 function showPage(page) {
   document.querySelectorAll(".view-tab").forEach(t =>
@@ -2030,6 +2164,7 @@ $("pageTabs").addEventListener("click", e => {
 
 ["inName", "inPos", "inSpeed", "inCourse", "inRings", "inAsset"].forEach(id =>
   $(id).addEventListener("input", () => { saveInputs(); render(); }));
+$("inName").addEventListener("input", syncShipSel);
 
 $("inTaken").addEventListener("input", () => { takenFromField(); saveInputs(); render(); });
 $("nowBtn").addEventListener("click", () => {

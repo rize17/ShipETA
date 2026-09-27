@@ -76,6 +76,21 @@ package manager.
 - **The rings field takes no `inputmode`.** A numeric keypad on a phone has no
   comma, so a field holding "100, 80" can be emptied and then never refilled.
   Any field whose value is a list needs the full keyboard.
+- **A saved ship holds her destination by name, not by index.** `destSel`
+  values are indices into `places[]`, and those shift the moment a port is
+  added or removed. A saved ship storing the index would come back pointed at
+  a different harbour with nothing on screen to say so — the quietest kind of
+  wrong answer this app could give. `applyShip()` resolves the name and
+  leaves the destination alone if it no longer exists.
+
+- **Ships are a pre-fill, not parallel slates.** Only one job is worked at a
+  time; loading a ship overwrites what's on screen. A saved ship carries the
+  whole job — position, speed, course, taken-at, destination and turning
+  points — because the route round the peninsula is hers, not the app's.
+  She also carries her old position time, so `compute()` warns past 12 hours
+  and says how far she's been carried on paper: dead reckoning will run a
+  day-old position into a 300-mile guess without ever looking wrong.
+
 - **The course steers nothing.** `model.course` is inert by design: it draws
   the dotted ray ahead of her and decides the Check panel's verdict, and
   touches no distance, no ETA and no ring crossing. It exists to expose a
