@@ -76,17 +76,24 @@ package manager.
 - **The rings field takes no `inputmode`.** A numeric keypad on a phone has no
   comma, so a field holding "100, 80" can be emptied and then never refilled.
   Any field whose value is a list needs the full keyboard.
-- **An RV replaces the port, it doesn't sit beside it.** Given an RV she
-  isn't going in, so it becomes the end of her track: `target = rvPos ||
-  trackTo || dest`, and the run, the ETA and every ring crossing are measured
-  to it. Drawing it as a second mark with its own figures and a ghost line to
-  it was the wrong shape - two answers on screen for one ship. One line,
-  named by `model.endName` for whatever it ends on.
+- **Where she's heading is one question with two answers.** Port and RV live
+  in one folded block with an explicit chooser; `targetMode` decides, not
+  "whichever happens to parse". The fold is shut by default but its summary
+  carries the answer — shut, it still says *Heading for Cape Town Port* or
+  *Heading for RV* — because that's the thing you most want without opening
+  anything. In RV mode the run, the ETA and every ring crossing are measured
+  to the RV; the port select is hidden but its value is kept, so switching
+  back costs nothing.
 
-- **Dragging the end handle moves the RV when one is set.** `setTrackFromMap`
-  writes back into the RV field rather than setting `trackTo`, which the RV
-  would override on the next compute - the handle would spring back and
-  nothing would say why.
+- **Dragging the open end stays an override on top of that choice.** `target
+  = trackTo || rvPos || dest`, so a drag wins over both, and "Back to …"
+  names whatever was chosen — *Back to RV*, not always *Back to port*. Don't
+  make a drag write into the RV field: that was tried in v4.7 and it
+  collapsed two distinct ideas (where she's going, and where she's actually
+  going) into one.
+
+- **`#destSel` lives inside the fold.** Anything driving the app — tests
+  included — has to open it first, the way a person does.
 
 - **A saved ship holds her destination by name, not by index.** `destSel`
   values are indices into `places[]`, and those shift the moment a port is
