@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.10</title>
+<title>Ship ETA v4.11</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -101,6 +101,26 @@
     outline: 2px solid var(--aqua-deep); border-color: transparent;
   }
   input.bad { border-color: var(--err); }
+
+  /* The RV box does not look like the boxes above it. A fresh position off
+     MarineTraffic has been pasted in here by mistake, which sends her to a
+     place she was never going and reads as perfectly valid. White, and
+     diamond-marked, to match the mark it puts on the map - so the box, the
+     label and the chart all say the same thing. */
+  #inRv {
+    background: rgba(232,244,255,0.07);
+    border-color: rgba(232,244,255,0.45);
+    color: #eaf5ff;
+  }
+  #inRv::placeholder { color: rgba(232,244,255,0.35); }
+  /* An id out-specifies input.bad, so the error state has to be restated. */
+  #inRv.bad { border-color: var(--err); color: var(--ink); }
+  #rvPick > label::before {
+    content: ""; display: inline-block;
+    width: 8px; height: 8px; margin-right: 7px;
+    background: #e8f4ff; border-radius: 2px;
+    transform: rotate(45deg);
+  }
   .mono {
     font-family: "SF Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
     font-variant-numeric: tabular-nums;
@@ -479,7 +499,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.10</span></h1>
+  <h1>Ship ETA<span class="version">v4.11</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
