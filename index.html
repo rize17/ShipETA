@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.9</title>
+<title>Ship ETA v4.10</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -296,6 +296,13 @@
   .pin { display: block; border-radius: 50%; box-sizing: border-box; }
   .pin-dest { width: 16px; height: 16px; background: var(--aqua); border: 2px solid #04121a; }
   .pin-base { width: 14px; height: 14px; background: var(--ok); border: 2px solid #04121a; }
+  /* The RV is a mark someone put on the chart, not a thing the app worked
+     out, so it's plain white rather than any colour that carries meaning. */
+  .pin-rv {
+    width: 12px; height: 12px; border-radius: 2px; background: #e8f4ff;
+    border: 2px solid #04121a; transform: rotate(45deg);
+    box-shadow: 0 0 0 1.5px rgba(4,18,26,0.8);
+  }
   /* Where she was reported: an open ring in the track's own colour, with a
      dark surround so it reads over pale water. */
   .pin-old {
@@ -349,6 +356,7 @@
   .leaflet-tooltip.lbl.p1 { border-color: var(--aqua-deep); }
   .leaflet-tooltip.lbl::before { display: none; }
   .leaflet-tooltip.lbl.dim { color: var(--ink-dim); }
+  .leaflet-tooltip.lbl.rv { border-color: #e8f4ff; color: #e8f4ff; }
 
   #mapSummary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
   #mapSummary .cell { background: #081420; border: 1px solid var(--panel-edge);
@@ -471,7 +479,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.9</span></h1>
+  <h1>Ship ETA<span class="version">v4.10</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -562,6 +570,7 @@
       <label for="inRv">RV position</label>
       <input id="inRv" spellcheck="false" autocapitalize="characters"
              placeholder="34° 10.000′ S, 017° 30.000′ E">
+      <div class="hint" id="rvEcho"></div>
       <div class="hint">Where she's coming out to meet us, typed the same way as her own
         position. Her track, her ETA and every ring crossing run to here instead of the
         port. Saved with the ship, so each one keeps her own.</div>
@@ -1328,6 +1337,28 @@ function renderResults() {
     $("inPos").classList.remove("bad");
   }
 
+  /* The RV gets the same treatment as her position. Without it a format the
+     parser won't take failed in silence: the track quietly ran to the port
+     while the RV button sat there lit, and the only hint was a note far
+     below the fold. */
+  const rvEcho = $("rvEcho");
+  const rvTyped = $("inRv").value.trim();
+  const rvParsed = rvTyped ? parseCoords($("inRv").value) : null;
+  if (!rvTyped) {
+    rvEcho.className = "hint";
+    rvEcho.textContent = "";
+    $("inRv").classList.remove("bad");
+  } else if (!rvParsed) {
+    rvEcho.className = "hint bad";
+    rvEcho.textContent = "Can't read that, so she's still being taken to the port. " +
+      "Try 34 06.1 S 017 19.7 E \u2014 or 34.1017 S, 17.3283 E.";
+    $("inRv").classList.add("bad");
+  } else {
+    rvEcho.className = "hint good";
+    rvEcho.innerHTML = fmtAll(rvParsed);
+    $("inRv").classList.remove("bad");
+  }
+
   if (!model) {
     box.innerHTML = '<div class="panel"><div class="empty">' +
       (ship ? "Pick a destination." : "Enter the ship's position to start.") +
@@ -1734,6 +1765,20 @@ function drawMap(fit) {
                       weight: 2.2, opacity: 0.95, dashArray: "2 8" }).addTo(overlay);
   }
 
+
+  /* The RV gets a mark of its own, the way the port does, so dragging the
+     line off it doesn't lose the thing you were aiming at. It carries no
+     figures: the run and the time belong to the end of the line and are on
+     the handle's label, whether that handle is here or somewhere else. Named
+     only when the line has been dragged away, again like the port - with the
+     handle sitting on it the name is already there. */
+  if (model.rv) {
+    const rvMk = L.marker([model.rv.lat, model.rv.lon], {
+      icon: L.divIcon({ className: "", html: '<i class="pin pin-rv"></i>', iconSize: [12, 12] }),
+      interactive: false
+    }).addTo(overlay);
+    if (trackTo) labelled(rvMk, "RV", true, "bottom", 6);
+  }
 
   /* Every ring she cuts, marked on her track and labelled with how far she
      runs to get there and when — the figures read off the line itself. The

@@ -85,6 +85,19 @@ package manager.
   to the RV; the port select is hidden but its value is kept, so switching
   back costs nothing.
 
+- **An RV that won't parse must say so on the field.** It used to fail in
+  silence: the track ran to the port while the RV button sat there lit, and
+  the only sign was a note far below the fold. The field echoes what it read
+  in all three formats, or goes red and says it can't — the same treatment
+  her own position gets, for the same reason.
+
+- **The RV mark carries no figures.** It is drawn like the port's mark, so
+  dragging the line off it doesn't lose what you were aiming at, and it is
+  named only once the handle has left it. The run and the time belong to the
+  end of the line and live on the handle's label — one place, wherever that
+  end happens to be. Don't give the RV its own distance or ETA; that was
+  v4.6's mistake.
+
 - **`transiting` means the line does not end at the port** — by a drag or by
   an RV, either one. The drag handle sits on it, the port gets a label of its
   own because the handle is no longer there, she is no longer going
