@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.6</title>
+<title>Ship ETA v4.7</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -295,14 +295,6 @@
   .pin { display: block; border-radius: 50%; box-sizing: border-box; }
   .pin-dest { width: 16px; height: 16px; background: var(--aqua); border: 2px solid #04121a; }
   .pin-base { width: 14px; height: 14px; background: var(--ok); border: 2px solid #04121a; }
-  /* The RV is a mark someone put on the chart, not a thing the app worked
-     out, so it's plain white and square-on rather than in any of the colours
-     that carry meaning here. */
-  .pin-rv {
-    width: 12px; height: 12px; border-radius: 2px; background: #e8f4ff;
-    border: 2px solid #04121a; transform: rotate(45deg);
-    box-shadow: 0 0 0 1.5px rgba(4,18,26,0.8);
-  }
   /* Where she was reported: an open ring in the track's own colour, with a
      dark surround so it reads over pale water. */
   .pin-old {
@@ -356,7 +348,6 @@
   .leaflet-tooltip.lbl.p1 { border-color: var(--aqua-deep); }
   .leaflet-tooltip.lbl::before { display: none; }
   .leaflet-tooltip.lbl.dim { color: var(--ink-dim); }
-  .leaflet-tooltip.lbl.rv { border-color: #e8f4ff; color: #e8f4ff; }
 
   #mapSummary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
   #mapSummary .cell { background: #081420; border: 1px solid var(--panel-edge);
@@ -479,7 +470,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.6</span></h1>
+  <h1>Ship ETA<span class="version">v4.7</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -557,9 +548,10 @@
     <label for="inRv">Where you plan to meet her</label>
     <input id="inRv" spellcheck="false" autocapitalize="characters"
            placeholder="34° 10.000′ S, 017° 30.000′ E">
-    <div class="hint" id="rvEcho">A fixed position instead of a range ring — typed the same
-      way as hers. It's saved with the ship, so each one keeps her own. Leave it empty and
-      nothing about it is shown.</div>
+    <div class="hint" id="rvEcho">Where she's coming out to meet us, typed the same way as
+      her own position. This <b>replaces the destination above</b> — she's not going in, so
+      her track, her ETA and every ring crossing run to the RV instead of the port. Saved
+      with the ship, so each one keeps her own; clear it and she goes back to the port.</div>
   </details>
 
   <div id="results"></div>
@@ -1088,8 +1080,13 @@ function compute() {
   if (!dest) { model = null; return; }
   if (!ship) { model = null; return; }
 
-  const transiting = !!trackTo;
-  const target = trackTo || dest;
+  /* An RV replaces the port: given one, she isn't going in, she's coming out
+     to meet us. It is the end of her track rather than a second thing drawn
+     beside it - one line, named for whatever it ends on. */
+  const rvPos = parseCoords($("inRv").value);
+  const transiting = !!rvPos || !!trackTo;
+  const target = rvPos || trackTo || dest;
+  const endName = rvPos ? "RV" : (trackTo ? "end of track" : dest.name);
   const reported = { lat: ship.lat, lon: ship.lon };
   const distAtReport = distanceNm(reported, dest);
 
@@ -1245,32 +1242,15 @@ function compute() {
     (ringList[0] || 0) + " nm of any airfield on this track. The nearest she gets is " +
     (outOfRange[0] ? outOfRange[0].cpa.nm.toFixed(0) + " nm off " + outOfRange[0].place.name : "\u2014") + "."]);
 
-  /* A rendezvous point she's given over the radio. It steers nothing: it is
-     a mark on the chart with our own figures next to it, so the time she
-     quotes can be held against what her position and speed actually allow.
-     The run is straight from where she is now, because a ship given an RV
-     steers for it rather than carrying on to the port - but how far it lies
-     off her current track is reported too, since that is what says whether
-     she has to divert at all. */
-  const rvPos = parseCoords($("inRv").value);
-  let rv = null;
-  if (rvPos) {
-    const runNm = distanceNm(now, rvPos);
-    rv = {
-      pos: rvPos,
-      nm: runNm,
-      brg: bearingDeg(now, rvPos),
-      hours: speed > 0 ? runNm / speed : null,
-      offTrack: analyse(rvPos).cpa.nm
-    };
-  }
   if ($("inRv").value.trim() && !rvPos)
-    notes.push(["warn", "That RV position can\u2019t be read \u2014 it\u2019s being ignored."]);
+    notes.push(["warn", "That RV position can\u2019t be read, so she\u2019s still being taken " +
+      "to " + dest.name + "."]);
 
   const fieldsShown = fields.filter(f => f.shown);
   const inRangeShown = inRange.filter(f => f.shown);
 
-  model = { name, dest, reported, now, moved, age, dist, distAtReport, brg, speed, aSpeed, course, rv,
+  model = { name, dest, reported, now, moved, age, dist, distAtReport, brg, speed, aSpeed, course,
+            rv: rvPos, endName,
             notes, t0, transiting, target, trackBrg, trackLen, arrival, fromNow,
             vertices, segs, runS, total,
             fields, inRange, outOfRange, ringList, fieldsShown, inRangeShown };
@@ -1347,7 +1327,9 @@ function renderResults() {
   const endH = model.speed > 0 ? model.trackLen / model.speed : null;
   html.push('<div class="headline">');
   html.push('<div class="k">' +
-    (model.transiting ? "To the end of her track" : "To " + esc(model.dest.name)) + "</div>");
+    (model.rv ? "To the RV"
+      : model.transiting ? "To the end of her track"
+      : "To " + esc(model.dest.name)) + "</div>");
   html.push('<div class="big">' + model.trackLen.toFixed(1) + "<small>nm</small></div>");
   if (endH != null) {
     html.push('<div class="sub">' + (model.transiting ? "There " : "Alongside ") +
@@ -1423,28 +1405,6 @@ function renderResults() {
       ".</div>");
   }
   html.push("</section>");
-
-  if (model.rv) {
-    html.push('<section class="panel"><h2>Rendezvous</h2>');
-    html.push('<div class="ringrow">');
-    html.push('<span class="rr-ring">RV</span>');
-    html.push('<span class="rr-eta">' + (model.rv.hours == null ? "\u2014"
-      : fmtClock(at(model.rv.hours), true)) + "</span>");
-    html.push('<span class="rr-run">' + (model.rv.hours == null ? ""
-      : fmtRun(model.rv.hours)) + "</span>");
-    html.push('<span class="rr-dist">' + model.rv.nm.toFixed(1) + " nm to run</span>");
-    html.push("</div>");
-    html.push('<div class="rr-sub">straight from where she is now, bearing ' +
-      pad3(model.rv.brg) + "\u00B0" +
-      (model.rv.hours == null ? " \u2014 add a speed for a time" : "") + "</div>");
-    html.push(posLine({ at: model.rv.pos }));
-    html.push('<div class="rr-sub' + (model.rv.offTrack > 5 ? " warn" : "") + '">' +
-      (model.rv.offTrack <= 1
-        ? "On her track to " + esc(model.dest.name) + " \u2014 no diversion in it."
-        : model.rv.offTrack.toFixed(1) + " nm off her track to " + esc(model.dest.name) +
-          ", so she has to come off it to make this.") + "</div>");
-    html.push("</section>");
-  }
 
   html.push('<section class="panel"><h2>Check</h2>');
   model.notes.forEach(([k, t]) => html.push('<div class="hint ' + k + '">' + esc(t) + "</div>"));
@@ -1541,6 +1501,15 @@ function noteMap(text, kind) {
 /* She steams towards whatever this is, and the rings stay where they are:
    around the port you fly from. */
 function setTrackFromMap(lat, lon) {
+  /* With an RV set, the RV *is* the end of the track, so dragging the handle
+     has to move the RV itself. Setting trackTo instead would be overridden on
+     the next compute and the handle would spring back with nothing said. */
+  if (model && model.rv) {
+    $("inRv").value = fmtDDM({ lat, lon });
+    saveInputs();
+    render();
+    return;
+  }
   trackTo = { lat, lon };
   saveInputs();
   render();
@@ -1741,23 +1710,6 @@ function drawMap(fit) {
   }
 
 
-  /* The rendezvous point, if one's been given. Drawn white so it reads as a
-     mark someone put there rather than anything the app worked out, with the
-     straight run to it dotted - she isn't on that line yet. */
-  if (model.rv) {
-    const rvPt = [model.rv.pos.lat, model.rv.pos.lon];
-    L.polyline([now, rvPt], { color: "#04121a", weight: 5, opacity: 0.45,
-                              dashArray: "1 7" }).addTo(overlay);
-    L.polyline([now, rvPt], { color: "#e8f4ff", weight: 2, opacity: 0.9,
-                              dashArray: "1 7" }).addTo(overlay);
-    L.marker(rvPt, {
-      icon: L.divIcon({ className: "", html: '<i class="pin pin-rv"></i>', iconSize: [12, 12] }),
-      interactive: false
-    }).addTo(overlay).bindTooltip("RV \u00B7 " + model.rv.nm.toFixed(1) + " nm" +
-      (model.rv.hours == null ? "" : " \u00B7 " + fmtClock(at(model.rv.hours), true)),
-      { permanent: true, direction: "top", className: "lbl rv" });
-  }
-
   /* Every ring she cuts, marked on her track and labelled with how far she
      runs to get there and when — the figures read off the line itself. The
      soonest get the highest priority, so they're the ones that survive when
@@ -1869,7 +1821,7 @@ function drawMap(fit) {
      how far she steams to get there and when. This is the only run-in figure
      on the map, and it's the one measured round the turning points. */
   const endH = model.speed > 0 ? model.trackLen / model.speed : null;
-  labelled(handle, (model.transiting ? "end of track" : model.dest.name) + "<br>" +
+  labelled(handle, esc(model.endName) + "<br>" +
     model.trackLen.toFixed(1) + " nm" +
     (endH == null ? "" : " \u00B7 " + fmtClock(at(endH), true)),
     false, "bottom", 1);
@@ -1968,7 +1920,8 @@ function briefText() {
     ", bearing " + pad3(model.brg) + "\u00B0" +
     (model.speed > 0 ? ", " + model.speed.toFixed(1) + " kt" : ""));
   if (model.transiting) {
-    L.push("Passing, not coming in: track set for " + fmtDDM(model.target));
+    L.push(model.rv ? "Meeting her at the RV: " + fmtDDM(model.target)
+                    : "Passing, not coming in: track set for " + fmtDDM(model.target));
   }
   L.push("");
   if (model.arrival) {
@@ -2001,15 +1954,6 @@ function briefText() {
     });
     L.push("");
   });
-  if (model.rv) {
-    L.push("RV   " + fmtDDM(model.rv.pos));
-    L.push("     " + model.rv.nm.toFixed(1) + " nm straight from her, bearing " +
-      pad3(model.rv.brg) + (model.rv.hours == null ? ""
-        : "   " + fmtClock(at(model.rv.hours), true) + "  " + fmtRun(model.rv.hours)));
-    L.push("     " + (model.rv.offTrack <= 1 ? "on her track"
-      : model.rv.offTrack.toFixed(1) + " nm off her track to " + model.dest.name));
-    L.push("");
-  }
   if (model.outOfRange.length) {
     L.push("Never in range: " +
       model.outOfRange.map(f => f.code + " " + f.cpa.nm.toFixed(0) + " nm").join(", "));
