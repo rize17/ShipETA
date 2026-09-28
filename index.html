@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.12</title>
+<title>Ship ETA v4.13</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -441,6 +441,25 @@
   }
   .dlg-head h2 { margin: 0; }
 
+  #mtText {
+    margin-top: 10px; min-height: 8.5em; resize: vertical;
+    font-family: "SF Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
+    font-size: 0.82rem; line-height: 1.45;
+  }
+  /* What it made of the paste, before anything is overwritten. */
+  .mt-row {
+    display: flex; gap: 10px; align-items: baseline;
+    padding: 7px 0; border-bottom: 1px solid var(--panel-edge);
+    font-size: 0.8rem;
+  }
+  .mt-row:last-child { border-bottom: 0; }
+  .mt-row .k {
+    flex: 0 0 5.6em; color: var(--ink-dim);
+    font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .mt-row .v { flex: 1; min-width: 0; }
+  .mt-row .v.miss { color: var(--amber); }
+
   /* A folded list is a heading you can tap. The marker is suppressed and
      redrawn as a chevron so it sits at the right-hand edge rather than
      shoving the heading across. */
@@ -506,7 +525,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.12</span></h1>
+  <h1>Ship ETA<span class="version">v4.13</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -545,6 +564,8 @@
     <label for="inName">Vessel (optional)</label>
     <input id="inName" placeholder="name or call sign" spellcheck="false">
     <div class="hint">Shown on the map, so a screenshot says which ship it is.</div>
+
+    <button class="ghost" id="mtBtn" type="button">Paste from MarineTraffic</button>
 
     <label for="inPos">Ship's position</label>
     <input id="inPos" spellcheck="false" autocapitalize="characters"
@@ -645,6 +666,22 @@
 </main>
 
 <!-- ======================= PLACES (settings) ======================= -->
+<dialog id="mtDlg">
+  <div class="dlg-head">
+    <h2>Paste from MarineTraffic</h2>
+    <button class="copy-chip" id="mtClose" type="button">Close</button>
+  </div>
+  <div class="hint">Copy the block off the MarineTraffic app — compass letters, place
+    names and all — and drop it in here. Only the lines it recognises are used.</div>
+  <textarea id="mtText" rows="7" spellcheck="false" autocapitalize="off" autocorrect="off"
+            placeholder="Data received&#10;28 Sep 08:41 UTC from Roaming&#10;11.8 kn&#10;Course 107° | Heading 107°&#10;33.5321° S, 16.9439° E"></textarea>
+  <div id="mtFound"></div>
+  <div class="grid2" style="margin-top:14px">
+    <button class="primary" id="mtUse" type="button" disabled>Use this</button>
+    <button class="ghost" id="mtCancel" type="button" style="margin-top:0">Cancel</button>
+  </div>
+</dialog>
+
 <dialog id="placesDlg">
   <div class="dlg-head">
     <h2>Places</h2>
@@ -2256,6 +2293,118 @@ function flash(btn, text) {
   setTimeout(() => { btn.textContent = was; btn.classList.remove("done"); }, 1500);
 }
 
+
+/* ---------- the MarineTraffic paste ---------- */
+/* Lifted off their app with the phone's own text recognition, so it arrives
+   as a jumble: the compass rose (bare N, W, E, S on their own lines), place
+   names, the navigational status. Each field is pulled out by its own anchor
+   and everything else is ignored. Nothing here guesses - a field that isn't
+   found stays not found and is reported as such, because the dangerous
+   outcome is three fields filled from this hour and a fourth left over from
+   the last one, all looking equally fresh. */
+const MT_MONTHS = { JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5,
+                    JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11 };
+
+function parseMT(text) {
+  const raw = String(text || "");
+  const out = { pos: null, posLine: null, speed: null, course: null,
+                takenAt: null, takenLine: null, zoneless: false };
+  if (!raw.trim()) return out;
+
+  /* The position is found line by line, never by scanning the whole block:
+     loose in the text are the compass letters, and a parser looking for
+     hemispheres anywhere would happily pair one of those with a digit from
+     the timestamp. A candidate line has to carry a N/S and an E/W each
+     against a number of its own, and still satisfy the real parser. */
+  raw.split(/\r?\n/).forEach(line => {
+    if (out.pos) return;
+    const t = line.trim();
+    if (t.length < 6 || !/\d/.test(t)) return;
+    const hasLat = /\d\s*[\u00B0\u2032\u2033'"]?\s*[NS]\b/i.test(t) || /\b[NS]\s*\d/i.test(t);
+    const hasLon = /\d\s*[\u00B0\u2032\u2033'"]?\s*[EW]\b/i.test(t) || /\b[EW]\s*\d/i.test(t);
+    if (!hasLat || !hasLon) return;
+    const q = parseCoords(t);
+    if (q) { out.pos = q; out.posLine = t; }
+  });
+
+  // "11.8 kn"
+  const sp = /(\d+(?:[.,]\d+)?)\s*(?:kn|kts?|knots)\b/i.exec(raw);
+  if (sp) {
+    const v = parseFloat(sp[1].replace(",", "."));
+    if (isFinite(v) && v >= 0 && v <= 60) out.speed = String(v);
+  }
+
+  /* Anchored on the word, because Course and Heading share a line and are
+     not the same number - 110 and 109 on the same ship. */
+  const co = /course\D{0,12}(\d{1,3}(?:[.,]\d+)?)/i.exec(raw);
+  if (co) {
+    const v = parseFloat(co[1].replace(",", "."));
+    if (isFinite(v) && v >= 0 && v <= 360) out.course = String(Math.round(v));
+  }
+
+  // "28 Sep 08:41 UTC"  — the app's own wording
+  let m = /(\d{1,2})\s+([A-Z]{3})[A-Z]*\.?\s+(\d{1,2}):(\d{2})\s*(UTC|GMT|Z)?/i.exec(raw);
+  if (m && MT_MONTHS[m[2].toUpperCase()] !== undefined) {
+    /* No year in the text. This year, unless that puts the report in the
+       future - which happens only across New Year, exactly when nobody is
+       checking the date on a screenshot. */
+    const now = new Date();
+    let y = now.getUTCFullYear();
+    const build = yy => Date.UTC(yy, MT_MONTHS[m[2].toUpperCase()], +m[1], +m[3], +m[4]);
+    let ms = build(y);
+    if (ms > now.getTime() + 2 * 86400000) ms = build(y - 1);
+    out.takenAt = ms;
+    out.takenLine = m[0].trim();
+    out.zoneless = !m[5];
+  } else {
+    // "2026-09-28 09:03 (UTC+1)" — the website's wording
+    m = /(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?:\s*\(?\s*(?:UTC|GMT)\s*([+-]\d{1,2})?)?/i.exec(raw);
+    if (m) {
+      const off = m[6] ? parseInt(m[6], 10) : 0;
+      out.takenAt = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - off, +m[5]);
+      out.takenLine = m[0].trim();
+      out.zoneless = !/UTC|GMT/i.test(m[0]);
+    }
+  }
+  return out;
+}
+
+function renderMTFound() {
+  const got = parseMT($("mtText").value);
+  const rows = [];
+  const row = (k, v, miss) => rows.push('<div class="mt-row"><span class="k">' + k +
+    '</span><span class="v' + (miss ? " miss" : "") + '">' + v + "</span></div>");
+
+  if (got.pos) row("Position", '<span class="mono">' + fmtDDM(got.pos) + "</span>");
+  else row("Position", "not found", true);
+  row("Speed", got.speed ? got.speed + " kt" : "not found \u2014 the speed below is left alone",
+      !got.speed);
+  row("Course", got.course ? pad3(+got.course) + "\u00B0"
+      : "not found \u2014 the course below is left alone", !got.course);
+  if (got.takenAt != null && !got.zoneless)
+    row("Taken at", fmtClock(new Date(got.takenAt), true) + (useUTC ? "" : " local"));
+  else if (got.takenAt != null)
+    row("Taken at", "found a time but not its zone \u2014 left alone", true);
+  else row("Taken at", "not found \u2014 the time below is left alone", true);
+
+  $("mtFound").innerHTML = $("mtText").value.trim() ? rows.join("") : "";
+  $("mtUse").disabled = !(got.pos || got.speed || got.course ||
+                          (got.takenAt != null && !got.zoneless));
+  return got;
+}
+
+function applyMT() {
+  const got = parseMT($("mtText").value);
+  /* Only what was actually read is written. Leaving a field alone is the
+     lesser evil against filling it with a guess. */
+  if (got.pos) $("inPos").value = got.posLine;
+  if (got.speed) $("inSpeed").value = got.speed;
+  if (got.course) $("inCourse").value = got.course;
+  if (got.takenAt != null && !got.zoneless) { takenAt = got.takenAt; takenToField(); }
+  saveInputs();
+  render();
+}
+
 /* ================= wiring ================= */
 loadInputs();
 renderDestSelects();
@@ -2267,6 +2416,22 @@ renderShipSel($("inName").value.trim());
 
 document.querySelectorAll("#targetPick button").forEach(b =>
   b.addEventListener("click", () => setTargetMode(b.dataset.target)));
+
+$("mtBtn").addEventListener("click", () => {
+  $("mtText").value = "";
+  $("mtFound").innerHTML = "";
+  $("mtUse").disabled = true;
+  $("mtDlg").showModal();
+  document.body.style.overflow = "hidden";
+  $("mtText").focus();
+});
+$("mtText").addEventListener("input", renderMTFound);
+$("mtText").addEventListener("paste", () => setTimeout(renderMTFound, 0));
+$("mtUse").addEventListener("click", () => { applyMT(); $("mtDlg").close(); });
+$("mtCancel").addEventListener("click", () => $("mtDlg").close());
+$("mtClose").addEventListener("click", () => $("mtDlg").close());
+$("mtDlg").addEventListener("click", e => { if (e.target === $("mtDlg")) $("mtDlg").close(); });
+$("mtDlg").addEventListener("close", () => { document.body.style.overflow = ""; });
 
 $("shipSel").addEventListener("change", () => {
   const s = ships.find(x => x.name === $("shipSel").value);

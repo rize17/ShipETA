@@ -85,6 +85,24 @@ package manager.
   to the RV; the port select is hidden but its value is kept, so switching
   back costs nothing.
 
+- **The MarineTraffic paste fills only what it actually read.** The block is
+  lifted off their app with the phone's own text recognition, so it arrives
+  with the compass rose in it — bare `N`, `W`, `E`, `S` on their own lines —
+  plus place names and the navigational status. Three things that took care:
+  the position is matched **line by line**, never by scanning the block (a
+  hemisphere-hunting parser will pair a compass letter with a digit out of
+  the timestamp); the course is anchored on the word **Course**, since
+  Heading shares its line and differs; and the timestamp carries no year, so
+  it takes this one unless that lands in the future, which only happens
+  across New Year. A field it can't read is left alone and said so — never
+  guessed. Three fields from this hour and a fourth from the last one, all
+  looking equally fresh, is the failure this must not have.
+
+- **The website paywalls latitude and longitude; their app gives them free.**
+  That's why this is a paste and not a scrape or an API call. Don't go
+  looking for a way to read the position off marinetraffic.com — it isn't in
+  the page.
+
 - **The RV is purple, everywhere it appears.** `--rv` is its colour and
   nothing else uses it: the input's border and tint, its label and diamond,
   and the mark on the map. A fresh position off MarineTraffic has been pasted
