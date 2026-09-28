@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.5</title>
+<title>Ship ETA v4.6</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -295,6 +295,14 @@
   .pin { display: block; border-radius: 50%; box-sizing: border-box; }
   .pin-dest { width: 16px; height: 16px; background: var(--aqua); border: 2px solid #04121a; }
   .pin-base { width: 14px; height: 14px; background: var(--ok); border: 2px solid #04121a; }
+  /* The RV is a mark someone put on the chart, not a thing the app worked
+     out, so it's plain white and square-on rather than in any of the colours
+     that carry meaning here. */
+  .pin-rv {
+    width: 12px; height: 12px; border-radius: 2px; background: #e8f4ff;
+    border: 2px solid #04121a; transform: rotate(45deg);
+    box-shadow: 0 0 0 1.5px rgba(4,18,26,0.8);
+  }
   /* Where she was reported: an open ring in the track's own colour, with a
      dark surround so it reads over pale water. */
   .pin-old {
@@ -348,6 +356,7 @@
   .leaflet-tooltip.lbl.p1 { border-color: var(--aqua-deep); }
   .leaflet-tooltip.lbl::before { display: none; }
   .leaflet-tooltip.lbl.dim { color: var(--ink-dim); }
+  .leaflet-tooltip.lbl.rv { border-color: #e8f4ff; color: #e8f4ff; }
 
   #mapSummary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
   #mapSummary .cell { background: #081420; border: 1px solid var(--panel-edge);
@@ -454,8 +463,10 @@
     #pageCalc > section.panel,
     #pageCalc > #copyBtn,
     #pageCalc > details.panel { grid-column: 1; }
-    /* Spans the three left-hand items so the brief starts at the top. */
-    #pageCalc > #results { grid-column: 2; grid-row: 1 / span 3; }
+    /* Spans past however many panels the left column holds, so adding one
+       doesn't strand the brief. Safe to overshoot: the row gap is 0 and an
+       empty implicit row is zero-height, so the extra spans cost nothing. */
+    #pageCalc > #results { grid-column: 2; grid-row: 1 / span 99; }
     #mapWrap { height: calc(100vh - 250px); min-height: 460px; }
     /* The card sat over a third of a phone screen; over a wide map it only
        needs its own width. */
@@ -468,7 +479,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.5</span></h1>
+  <h1>Ship ETA<span class="version">v4.6</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -540,6 +551,16 @@
     <select id="destSel"></select>
     <div class="hint mono" id="destEcho"></div>
   </section>
+
+  <details class="panel" id="rvFold">
+    <summary>Rendezvous point (optional)</summary>
+    <label for="inRv">Where you plan to meet her</label>
+    <input id="inRv" spellcheck="false" autocapitalize="characters"
+           placeholder="34° 10.000′ S, 017° 30.000′ E">
+    <div class="hint" id="rvEcho">A fixed position instead of a range ring — typed the same
+      way as hers. It's saved with the ship, so each one keeps her own. Leave it empty and
+      nothing about it is shown.</div>
+  </details>
 
   <div id="results"></div>
 
@@ -950,7 +971,7 @@ let editing = -1;   // index being edited on the Places tab, -1 = adding
 
 /* ================= inputs ================= */
 const $ = id => document.getElementById(id);
-const FIELDS = ["inName", "inPos", "inSpeed", "inCourse", "inRings", "inAsset"];
+const FIELDS = ["inName", "inPos", "inSpeed", "inCourse", "inRv", "inRings", "inAsset"];
 
 /* When the position was reported, as an instant rather than an age in minutes.
    An age is only true at the moment it's typed; come back to the job half an
@@ -1224,10 +1245,32 @@ function compute() {
     (ringList[0] || 0) + " nm of any airfield on this track. The nearest she gets is " +
     (outOfRange[0] ? outOfRange[0].cpa.nm.toFixed(0) + " nm off " + outOfRange[0].place.name : "\u2014") + "."]);
 
+  /* A rendezvous point she's given over the radio. It steers nothing: it is
+     a mark on the chart with our own figures next to it, so the time she
+     quotes can be held against what her position and speed actually allow.
+     The run is straight from where she is now, because a ship given an RV
+     steers for it rather than carrying on to the port - but how far it lies
+     off her current track is reported too, since that is what says whether
+     she has to divert at all. */
+  const rvPos = parseCoords($("inRv").value);
+  let rv = null;
+  if (rvPos) {
+    const runNm = distanceNm(now, rvPos);
+    rv = {
+      pos: rvPos,
+      nm: runNm,
+      brg: bearingDeg(now, rvPos),
+      hours: speed > 0 ? runNm / speed : null,
+      offTrack: analyse(rvPos).cpa.nm
+    };
+  }
+  if ($("inRv").value.trim() && !rvPos)
+    notes.push(["warn", "That RV position can\u2019t be read \u2014 it\u2019s being ignored."]);
+
   const fieldsShown = fields.filter(f => f.shown);
   const inRangeShown = inRange.filter(f => f.shown);
 
-  model = { name, dest, reported, now, moved, age, dist, distAtReport, brg, speed, aSpeed, course,
+  model = { name, dest, reported, now, moved, age, dist, distAtReport, brg, speed, aSpeed, course, rv,
             notes, t0, transiting, target, trackBrg, trackLen, arrival, fromNow,
             vertices, segs, runS, total,
             fields, inRange, outOfRange, ringList, fieldsShown, inRangeShown };
@@ -1380,6 +1423,28 @@ function renderResults() {
       ".</div>");
   }
   html.push("</section>");
+
+  if (model.rv) {
+    html.push('<section class="panel"><h2>Rendezvous</h2>');
+    html.push('<div class="ringrow">');
+    html.push('<span class="rr-ring">RV</span>');
+    html.push('<span class="rr-eta">' + (model.rv.hours == null ? "\u2014"
+      : fmtClock(at(model.rv.hours), true)) + "</span>");
+    html.push('<span class="rr-run">' + (model.rv.hours == null ? ""
+      : fmtRun(model.rv.hours)) + "</span>");
+    html.push('<span class="rr-dist">' + model.rv.nm.toFixed(1) + " nm to run</span>");
+    html.push("</div>");
+    html.push('<div class="rr-sub">straight from where she is now, bearing ' +
+      pad3(model.rv.brg) + "\u00B0" +
+      (model.rv.hours == null ? " \u2014 add a speed for a time" : "") + "</div>");
+    html.push(posLine({ at: model.rv.pos }));
+    html.push('<div class="rr-sub' + (model.rv.offTrack > 5 ? " warn" : "") + '">' +
+      (model.rv.offTrack <= 1
+        ? "On her track to " + esc(model.dest.name) + " \u2014 no diversion in it."
+        : model.rv.offTrack.toFixed(1) + " nm off her track to " + esc(model.dest.name) +
+          ", so she has to come off it to make this.") + "</div>");
+    html.push("</section>");
+  }
 
   html.push('<section class="panel"><h2>Check</h2>');
   model.notes.forEach(([k, t]) => html.push('<div class="hint ' + k + '">' + esc(t) + "</div>"));
@@ -1676,6 +1741,23 @@ function drawMap(fit) {
   }
 
 
+  /* The rendezvous point, if one's been given. Drawn white so it reads as a
+     mark someone put there rather than anything the app worked out, with the
+     straight run to it dotted - she isn't on that line yet. */
+  if (model.rv) {
+    const rvPt = [model.rv.pos.lat, model.rv.pos.lon];
+    L.polyline([now, rvPt], { color: "#04121a", weight: 5, opacity: 0.45,
+                              dashArray: "1 7" }).addTo(overlay);
+    L.polyline([now, rvPt], { color: "#e8f4ff", weight: 2, opacity: 0.9,
+                              dashArray: "1 7" }).addTo(overlay);
+    L.marker(rvPt, {
+      icon: L.divIcon({ className: "", html: '<i class="pin pin-rv"></i>', iconSize: [12, 12] }),
+      interactive: false
+    }).addTo(overlay).bindTooltip("RV \u00B7 " + model.rv.nm.toFixed(1) + " nm" +
+      (model.rv.hours == null ? "" : " \u00B7 " + fmtClock(at(model.rv.hours), true)),
+      { permanent: true, direction: "top", className: "lbl rv" });
+  }
+
   /* Every ring she cuts, marked on her track and labelled with how far she
      runs to get there and when — the figures read off the line itself. The
      soonest get the highest priority, so they're the ones that survive when
@@ -1919,6 +2001,15 @@ function briefText() {
     });
     L.push("");
   });
+  if (model.rv) {
+    L.push("RV   " + fmtDDM(model.rv.pos));
+    L.push("     " + model.rv.nm.toFixed(1) + " nm straight from her, bearing " +
+      pad3(model.rv.brg) + (model.rv.hours == null ? ""
+        : "   " + fmtClock(at(model.rv.hours), true) + "  " + fmtRun(model.rv.hours)));
+    L.push("     " + (model.rv.offTrack <= 1 ? "on her track"
+      : model.rv.offTrack.toFixed(1) + " nm off her track to " + model.dest.name));
+    L.push("");
+  }
   if (model.outOfRange.length) {
     L.push("Never in range: " +
       model.outOfRange.map(f => f.code + " " + f.cpa.nm.toFixed(0) + " nm").join(", "));
@@ -2073,6 +2164,7 @@ function currentShip() {
     pos: $("inPos").value,
     speed: $("inSpeed").value,
     course: $("inCourse").value,
+    rv: $("inRv").value,
     takenAt: takenAt,
     dest: dest ? dest.name : null,
     wayPts: wayPts.map(w => ({ lat: w.lat, lon: w.lon })),
@@ -2085,6 +2177,7 @@ function applyShip(s) {
   $("inPos").value = s.pos || "";
   $("inSpeed").value = s.speed || "";
   $("inCourse").value = s.course || "";
+  $("inRv").value = s.rv || "";
   takenAt = isFinite(s.takenAt) ? s.takenAt : null;
   takenToField();
   const i = places.findIndex(p => !isField(p) && p.name === s.dest);
@@ -2162,7 +2255,7 @@ $("pageTabs").addEventListener("click", e => {
   if (b) showPage(b.dataset.page);
 });
 
-["inName", "inPos", "inSpeed", "inCourse", "inRings", "inAsset"].forEach(id =>
+["inName", "inPos", "inSpeed", "inCourse", "inRv", "inRings", "inAsset"].forEach(id =>
   $(id).addEventListener("input", () => { saveInputs(); render(); }));
 $("inName").addEventListener("input", syncShipSel);
 

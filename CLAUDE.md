@@ -76,6 +76,18 @@ package manager.
 - **The rings field takes no `inputmode`.** A numeric keypad on a phone has no
   comma, so a field holding "100, 80" can be emptied and then never refilled.
   Any field whose value is a list needs the full keyboard.
+- **The RV steers nothing either.** It's a position she gave over the radio,
+  marked on the chart with our own figures beside it so her quoted time can
+  be held against what her position and speed allow. It is not a turning
+  point and not a destination: the track, the rings and every ETA are
+  identical with it set and unset. Dragging the end of her track is still
+  how you change where she's going.
+
+- **The RV run is straight from where she is now**, because a ship given an
+  RV steers for it rather than carrying on to the port. How far it lies off
+  her current track is reported next to it, since that is what says whether
+  there's a diversion in it at all.
+
 - **A saved ship holds her destination by name, not by index.** `destSel`
   values are indices into `places[]`, and those shift the moment a port is
   added or removed. A saved ship storing the index would come back pointed at
