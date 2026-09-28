@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.8</title>
+<title>Ship ETA v4.9</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -471,7 +471,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.8</span></h1>
+  <h1>Ship ETA<span class="version">v4.9</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -1102,8 +1102,15 @@ function compute() {
   const rvPos = targetMode === "rv" ? parseCoords($("inRv").value) : null;
   const headingFor = rvPos ? "RV" : dest.name;
   /* Dragging the open end stays what it always was: an override on top of
-     whichever target was chosen, which is what "Back to ..." puts back. */
-  const transiting = !!trackTo;
+     whichever target was chosen, which is what "Back to ..." puts back.
+
+     `transiting` means the line does NOT end at the port - by a drag or by an
+     RV, either one. Everything downstream keys off it: the drag handle sits
+     on the end of the line, the port gets a label of its own because the
+     handle is no longer on it, and she is no longer going "alongside"
+     anything. Narrowing it to just the drag in v4.8 left the handle and its
+     label behind at the port while the line ran on to the RV. */
+  const transiting = !!trackTo || !!rvPos;
   const target = trackTo || rvPos || dest;
   const endName = trackTo ? "end of track" : headingFor;
   const reported = { lat: ship.lat, lon: ship.lon };
@@ -1250,7 +1257,9 @@ function compute() {
     "If you meant southern Africa it wants an S."]);
   if (dist > 3000) notes.push(["warn", "That's " + Math.round(dist) +
     " nm from " + dest.name + " — worth re-reading the coordinates."]);
-  if (transiting) notes.push(["good", "Her track is set from the map: she passes " +
+  if (rvPos && !trackTo) notes.push(["good", "She\u2019s coming out to the RV rather than " +
+    "going into " + dest.name + ". Every time below runs to the RV."]);
+  else if (transiting) notes.push(["good", "Her track is set from the map: she passes " +
     dest.name + " rather than coming in. Times below are for that track."]);
   if (wayPts.length) notes.push(["good", wayPts.length +
     (wayPts.length === 1 ? " turning point" : " turning points") + " set: " +

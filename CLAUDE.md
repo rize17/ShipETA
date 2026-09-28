@@ -85,6 +85,14 @@ package manager.
   to the RV; the port select is hidden but its value is kept, so switching
   back costs nothing.
 
+- **`transiting` means the line does not end at the port** — by a drag or by
+  an RV, either one. The drag handle sits on it, the port gets a label of its
+  own because the handle is no longer there, she is no longer going
+  “alongside”, and the brief changes wording. Narrowing it to just the drag
+  broke all of that at once in v4.8: the handle and its label stayed at the
+  port while the line ran on to the RV. Whatever else changes, the handle
+  belongs at `model.target`.
+
 - **Dragging the open end stays an override on top of that choice.** `target
   = trackTo || rvPos || dest`, so a drag wins over both, and "Back to …"
   names whatever was chosen — *Back to RV*, not always *Back to port*. Don't
