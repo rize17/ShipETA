@@ -85,14 +85,21 @@ package manager.
   to the RV; the port select is hidden but its value is kept, so switching
   back costs nothing.
 
-- **The RV box must not look like the boxes above it.** A fresh position off
-  MarineTraffic has been pasted into it by mistake, and a valid position in
-  the wrong field is the worst kind of error here: everything parses,
-  everything looks right, and she is taken to a place she was never going.
-  It's white and diamond-marked to match the mark it puts on the map, so the
-  box, the label and the chart all say the same thing. `#inRv` is an id, so
-  it out-specifies `input.bad` — the error state is restated as `#inRv.bad`
-  or the red border silently loses.
+- **The RV is purple, everywhere it appears.** `--rv` is its colour and
+  nothing else uses it: the input's border and tint, its label and diamond,
+  and the mark on the map. A fresh position off MarineTraffic has been pasted
+  into that box by mistake, and a valid position in the wrong field is the
+  worst error this app takes — it parses, it looks right, and she is taken
+  somewhere she was never going. Nothing can catch it, so the box has to.
+  Not red, which means the coords won't parse; deeper than the `#c9a7f5`
+  lavender of the out-of-range rings, the only other purple on screen.
+  `#inRv` is an id and out-specifies `input.bad`, so the error state is
+  restated as `#inRv.bad` or the red border silently loses.
+
+- **Whatever names the end of the track names it everywhere.** The map
+  button, the note under the map and the headline all say RV or port
+  together. They drifted apart once already, with the button offering "Back
+  to RV" over a note about the port.
 
 - **An RV that won't parse must say so on the field.** It used to fail in
   silence: the track ran to the port while the RV button sat there lit, and

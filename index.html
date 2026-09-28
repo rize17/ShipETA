@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.11</title>
+<title>Ship ETA v4.12</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -27,6 +27,7 @@
     --amber: #e8b638;
     --ok: #4fd08a;
     --err: #e86a5e;
+    --rv: #b478ff;      /* the RV, and nothing else */
     font-size: 16px;
   }
   * { box-sizing: border-box; margin: 0; }
@@ -104,21 +105,27 @@
 
   /* The RV box does not look like the boxes above it. A fresh position off
      MarineTraffic has been pasted in here by mistake, which sends her to a
-     place she was never going and reads as perfectly valid. White, and
-     diamond-marked, to match the mark it puts on the map - so the box, the
-     label and the chart all say the same thing. */
+     place she was never going and reads as perfectly valid - nothing catches
+     it, so the box has to. Purple: not the navy of every other field, and
+     not red, which means the coords won't parse. The label's diamond and the
+     mark on the map are the same purple, so the box, the label and the chart
+     all say the same thing. Deeper than the lavender of the out-of-range
+     rings, which is the only other purple on screen. */
   #inRv {
-    background: rgba(232,244,255,0.07);
-    border-color: rgba(232,244,255,0.45);
-    color: #eaf5ff;
+    background: rgba(180,120,255,0.16);
+    border-color: var(--rv);
+    color: #f0e4ff;
   }
-  #inRv::placeholder { color: rgba(232,244,255,0.35); }
-  /* An id out-specifies input.bad, so the error state has to be restated. */
-  #inRv.bad { border-color: var(--err); color: var(--ink); }
+  #inRv::placeholder { color: rgba(240,228,255,0.38); }
+  #inRv:focus { outline-color: var(--rv); }
+  /* An id out-specifies input.bad, so the error state has to be restated or
+     the red border silently loses to the purple one. */
+  #inRv.bad { border-color: var(--err); background: rgba(232,106,94,0.10); color: var(--ink); }
+  #rvPick > label { color: var(--rv); }
   #rvPick > label::before {
     content: ""; display: inline-block;
     width: 8px; height: 8px; margin-right: 7px;
-    background: #e8f4ff; border-radius: 2px;
+    background: var(--rv); border-radius: 2px;
     transform: rotate(45deg);
   }
   .mono {
@@ -319,7 +326,7 @@
   /* The RV is a mark someone put on the chart, not a thing the app worked
      out, so it's plain white rather than any colour that carries meaning. */
   .pin-rv {
-    width: 12px; height: 12px; border-radius: 2px; background: #e8f4ff;
+    width: 12px; height: 12px; border-radius: 2px; background: var(--rv);
     border: 2px solid #04121a; transform: rotate(45deg);
     box-shadow: 0 0 0 1.5px rgba(4,18,26,0.8);
   }
@@ -376,7 +383,7 @@
   .leaflet-tooltip.lbl.p1 { border-color: var(--aqua-deep); }
   .leaflet-tooltip.lbl::before { display: none; }
   .leaflet-tooltip.lbl.dim { color: var(--ink-dim); }
-  .leaflet-tooltip.lbl.rv { border-color: #e8f4ff; color: #e8f4ff; }
+  .leaflet-tooltip.lbl.rv { border-color: var(--rv); color: #d9bcff; }
 
   #mapSummary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
   #mapSummary .cell { background: #081420; border: 1px solid var(--panel-edge);
@@ -499,7 +506,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.11</span></h1>
+  <h1>Ship ETA<span class="version">v4.12</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -1576,7 +1583,8 @@ function noteMap(text, kind) {
   const el = $("mapNote");
   el.className = "hint" + (kind ? " " + kind : "");
   el.textContent = text || (trackTo
-    ? "Track set by hand. Drag the open end again, or put it back to the port."
+    ? "Track set by hand. Drag the open end again, or put it back to " +
+      (model && model.rv ? "the RV." : "the port.")
     : "Aqua rings she reaches, violet she doesn't. Drag the open end of her track." +
       (model && model.course != null
         ? " The dotted line ahead of her is the course you entered."
