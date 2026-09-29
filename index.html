@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.16</title>
+<title>Ship ETA v4.17</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -525,7 +525,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.16</span></h1>
+  <h1>Ship ETA<span class="version">v4.17</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -1120,7 +1120,13 @@ function loadInputs() {
   wayPts = savedWays.filter(w => w && isFinite(w.lat) && isFinite(w.lon))
                     .map(w => ({ lat: w.lat, lon: w.lon })).slice(0, 4);
 }
+/* Set by every path that changes the job - typing, a map drag, anything that
+   saves - and cleared only when the job on screen came from a ship record.
+   It is what stops a sync overwriting something half-typed. */
+let jobDirty = false;
+
 function saveInputs() {
+  jobDirty = true;
   const out = {};
   FIELDS.forEach(f => out[f] = $(f).value);
   out.dest = $("destSel").value;
@@ -2301,7 +2307,15 @@ function applyShip(s) {
   trackTo = (s.trackTo && isFinite(s.trackTo.lat) && isFinite(s.trackTo.lon))
     ? { lat: s.trackTo.lat, lon: s.trackTo.lon } : null;
   saveInputs();
+  jobDirty = false;          // this job IS the ship record, not an edit of it
   render();
+}
+
+/* Enough of a ship to tell whether the shared copy has moved on. Field order
+   is fixed so two records compare the same way round. */
+function shipPrint(s) {
+  return !s ? "" : JSON.stringify([s.pos, s.speed, s.course, s.rv, s.takenAt,
+    s.dest, s.targetMode, s.wayPts, s.trackTo]);
 }
 
 /* Brief confirmation on the button itself - there's nowhere else to put it. */
@@ -2446,7 +2460,7 @@ function applyMT() {
 const SYNC_URL = "https://shipeta-sync.ryantholliday.workers.dev";
 
 let syncUrl = SYNC_URL, syncKey = "";
-let syncAt = 0, syncMsg = "";
+let syncAt = 0, syncMsg = "", syncFresh = "";
 
 function loadSync() {
   syncUrl = String(store.get("shipeta.syncUrl", "") || "") || SYNC_URL;
@@ -2487,6 +2501,20 @@ async function syncPull(pushLocal) {
   saveShips();
   syncAt = Date.now();
   syncMsg = "";
+
+  /* Picking a ship COPIES her into the fields, so refreshing the list behind
+     them changes nothing on screen - someone reading a position would go on
+     reading the old one with nothing to say it had moved. If the ship on
+     screen has changed on the shared list, she is reloaded; if the job has
+     been edited here, it is left alone and said so instead, because silently
+     discarding someone's typing is the worse of the two. */
+  const name = $("inName").value.trim();
+  const fresh = name && ships.find(x => x.name.toLowerCase() === name.toLowerCase());
+  syncFresh = "";
+  if (fresh && shipPrint(fresh) !== shipPrint(currentShip())) {
+    if (jobDirty) syncFresh = "changed";
+    else { applyShip(fresh); syncFresh = "reloaded"; }
+  }
   renderShipSel($("inName").value.trim());
   return got;
 }
@@ -2527,9 +2555,14 @@ function renderSyncLine() {
     el.className = "hint bad";
     el.textContent = "Shared list: " + syncMsg + " \u2014 the ships below are this device\u2019s " +
       "copy" + (syncAt ? ", last agreed " + since() : "") + ".";
+  } else if (syncFresh === "changed") {
+    el.className = "hint bad";
+    el.textContent = "\u2191 " + esc($("inName").value.trim()) + " has changed on the shared " +
+      "list, but this job has been edited here \u2014 pick her again to take theirs.";
   } else if (syncAt) {
     el.className = "hint good";
-    el.textContent = "Shared list \u00B7 synced " + since();
+    el.textContent = "Shared list \u00B7 synced " + since() +
+      (syncFresh === "reloaded" ? " \u00B7 this job was updated by someone else" : "");
   } else {
     el.className = "hint";
     el.textContent = "Shared list \u00B7 connecting\u2026";
@@ -2543,12 +2576,24 @@ renderDestList();
 setTargetMode(targetMode, true);
 loadShips();
 loadSync();
-if (syncOn()) {
+/* A tab left open on somebody's desk was never checking again: the list was
+   fetched once at boot and that was that. Ops watching a ship would sit on a
+   position from whenever the page happened to load. */
+function syncRefresh() {
+  if (!syncOn() || document.hidden) return;
   syncPull(false)
     .catch(e => { syncMsg = String(e.message || e); })
     .then(renderSyncLine);
 }
+syncRefresh();
 renderSyncLine();
+
+/* A minute is far quicker than positions actually change, and 1440 reads a
+   day per device is nothing against KV's 100,000. Paused while the tab is
+   hidden, and caught up the moment it comes back, which is when someone is
+   about to read it. */
+setInterval(syncRefresh, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) syncRefresh(); });
 
 $("syncNow").addEventListener("click", async () => {
   syncUrl = String(store.get("shipeta.syncUrl", "") || "") || SYNC_URL;

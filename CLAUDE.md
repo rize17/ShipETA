@@ -85,6 +85,26 @@ package manager.
   to the RV; the port select is hidden but its value is kept, so switching
   back costs nothing.
 
+- **Syncing the list is not syncing the screen.** Picking a ship *copies*
+  her into the fields, so refreshing the list behind them changes nothing a
+  reader can see — ops would go on reading a position that had moved, with
+  the app looking entirely current. `syncPull` compares the ship on screen
+  against the shared copy and reloads her. Whatever else changes here, that
+  comparison has to stay: a stale position that looks fresh is the worst
+  thing this app can show.
+
+- **`jobDirty` is what stops a sync eating someone's typing.** Every route
+  that changes the job goes through `saveInputs()`, so the flag is set there
+  and cleared only in `applyShip()`, where the job on screen *is* a ship
+  record rather than an edit of one. Dirty means the incoming version is
+  announced, not applied.
+
+- **A tab left open has to keep checking.** The list was fetched once at boot,
+  so a page on somebody's desk sat on whatever was true when it loaded.
+  Polled every minute, paused while the tab is hidden and caught up on
+  `visibilitychange` — which is the moment someone looks at it. 1440 reads a
+  day per device against KV's 100,000 free.
+
 - **The worker's address is in the code; the key never is.** `SYNC_URL` is a
   public URL, visible in the page source whatever we do, so hardcoding it
   saves everyone typing it and saves a colleague mistyping it. The shared key
