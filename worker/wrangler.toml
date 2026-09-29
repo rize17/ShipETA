@@ -1,0 +1,17 @@
+# Deploy config for the sync worker.
+#
+# With the Worker connected to this repo in the Cloudflare dashboard
+# (Workers Builds, root directory "worker"), a push to main deploys it, so
+# nothing ever has to be pasted into the editor on a phone.
+#
+# The KV id below is an identifier, not a credential - it is safe in the
+# repo. The shared secret is NOT here: it stays a dashboard secret, which a
+# deploy leaves alone. Never add SHIPETA_KEY to this file.
+
+name = "shipeta-sync"
+main = "shipeta-sync.js"
+compatibility_date = "2026-09-01"
+
+[[kv_namespaces]]
+binding = "SHIPS"
+id = "PUT_THE_KV_NAMESPACE_ID_HERE"
