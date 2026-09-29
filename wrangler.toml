@@ -1,0 +1,23 @@
+# Deploy config for the sync worker, at the REPO ROOT on purpose.
+#
+# Workers Builds runs from whatever root directory the dashboard is set to.
+# Pointed at the repo root with no config here, it found index.html and
+# deployed the Ship ETA app itself as a static site - the worker never ran,
+# every path returned an empty body, and the dashboard reported "Workers with
+# only static assets". Naming main here makes the build deploy the script
+# whichever directory it starts from.
+#
+# worker/wrangler.toml says the same thing for a build rooted at worker/.
+# Keeping both means neither dashboard setting can silently do the wrong
+# thing again.
+#
+# No [assets] block: this worker serves no files, only JSON. The app is on
+# GitHub Pages and has nothing to do with this deployment.
+
+name = "shipeta-sync"
+main = "worker/shipeta-sync.js"
+compatibility_date = "2026-09-01"
+
+[[kv_namespaces]]
+binding = "SHIPS"
+id = "c6d70e21658b4db28f72d2bd56fb8dc1"
