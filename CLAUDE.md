@@ -85,6 +85,26 @@ package manager.
   to the RV; the port select is hidden but its value is kept, so switching
   back costs nothing.
 
+- **The shared list is optional and never load-bearing.** With no worker
+  address set the app is exactly what it was — ships on this device, no
+  network. With one set, the ship list lives in a Cloudflare worker behind a
+  shared key (see `worker/`). `syncPush` never throws: a sync failure must
+  not take the calculator down, so a save always lands locally first and the
+  line on Calculate says the shared copy didn't. Connecting sends up ships
+  this device has that the list hasn't, and deletes nothing.
+
+- **The worker has no endpoint that writes the whole list.** Every write
+  names one ship and the worker merges it. A client holding a list from
+  hours ago therefore cannot revert anyone else's work, because there is no
+  request it could send that would.
+
+- **The worker reads its key from KV, not from a runtime secret.** It was
+  first deployed by accident as a static-assets site, and Cloudflare then
+  refused runtime variables on it ever after. KV bindings still work, since
+  those come from `wrangler.toml`, but a secret can never come from the
+  repo — so the key is written by hand into KV under `auth:key`.
+  `env.SHIPETA_KEY` still wins if it is ever settable again.
+
 - **The MarineTraffic paste fills only what it actually read.** The block is
   lifted off their app with the phone's own text recognition, so it arrives
   with the compass rose in it — bare `N`, `W`, `E`, `S` on their own lines —

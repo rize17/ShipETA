@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.13</title>
+<title>Ship ETA v4.14</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -525,7 +525,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.13</span></h1>
+  <h1>Ship ETA<span class="version">v4.14</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -557,6 +557,7 @@
       <button id="shipSave" type="button">Save</button>
       <button id="shipDel" type="button">Delete</button>
     </div>
+    <div class="hint" id="syncLine"></div>
     <div class="hint">Save her once and the whole job comes back next time — position,
       speed, course, destination and any turning points — so only what’s changed needs
       retyping. Saving again under the same name updates her.</div>
@@ -745,6 +746,27 @@
   <details class="fold">
     <summary><h2>Ports<span class="count" id="portCount"></span></h2></summary>
     <div id="portList"></div>
+  </details>
+
+  <details class="fold" id="syncFold">
+    <summary><h2>Shared list<span class="count" id="syncCount"></span></h2></summary>
+    <div class="hint">Point every phone at the same worker and the ship list is shared, so
+      nobody re-enters a vessel someone has already set up. Leave it empty and the app
+      stays exactly as it was, with the list kept on this device only.</div>
+    <label for="syncUrl">Worker address</label>
+    <input id="syncUrl" spellcheck="false" autocapitalize="off" autocorrect="off"
+           inputmode="url" placeholder="https://shipeta-sync.example.workers.dev">
+    <label for="syncKey">Shared key</label>
+    <input id="syncKey" spellcheck="false" autocapitalize="off" autocorrect="off"
+           placeholder="the key everyone uses">
+    <div class="grid2" style="margin-top:12px">
+      <button class="primary" id="syncNow" type="button">Connect</button>
+      <button class="ghost" id="syncOff" type="button" style="margin-top:0">Disconnect</button>
+    </div>
+    <div class="hint" id="syncEcho"></div>
+    <div class="hint">Ships saved on this device that the others don’t have are sent up the
+      first time you connect — nothing is deleted. After that, saving or deleting a ship
+      does the same on the shared list.</div>
   </details>
 
   <button class="ghost danger" id="dRestore" type="button">Reset built-in places to defaults</button>
@@ -2405,12 +2427,145 @@ function applyMT() {
   render();
 }
 
+
+/* ---------- the shared ship list ---------- */
+/* One worker, one shared key, the same list on everyone's phone. Entirely
+   optional: with no address set the app behaves exactly as it did, storing
+   ships on this device alone, and every path below no-ops.
+
+   The local copy is always kept in step with what the server returns. Not for
+   working offline - this is a planning tool with a signal - but so that a
+   worker hiccup shows the list from ten minutes ago with its age on it,
+   rather than an empty screen while someone is deciding whether to launch. */
+let syncUrl = "", syncKey = "";
+let syncAt = 0, syncMsg = "";
+
+function loadSync() {
+  syncUrl = String(store.get("shipeta.syncUrl", "") || "");
+  syncKey = String(store.get("shipeta.syncKey", "") || "");
+  $("syncUrl").value = syncUrl;
+  $("syncKey").value = syncKey;
+}
+const syncOn = () => !!(syncUrl && syncKey);
+
+async function syncCall(path, method, body) {
+  const r = await fetch(syncUrl.replace(/\/+$/, "") + path, {
+    method: method || "GET",
+    headers: { "X-API-Key": syncKey, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (r.status === 401) throw new Error("that key was rejected");
+  if (r.status === 503) throw new Error("the worker has no key set");
+  if (!r.ok) throw new Error("the worker answered " + r.status);
+  return r.json();
+}
+
+/* Ships held here that the shared list hasn't got are sent up; nothing is
+   ever deleted by connecting. Someone joining with their own vessels keeps
+   them and shares them, rather than being asked to choose. */
+async function syncPull(pushLocal) {
+  const got = await syncCall("/ships");
+  if (pushLocal && ships.length) {
+    const there = new Set((got.ships || []).map(x => String(x.name).toLowerCase()));
+    let sent = 0;
+    for (const sh of ships) {
+      if (sh && sh.name && !there.has(String(sh.name).toLowerCase())) {
+        await syncCall("/ships/" + encodeURIComponent(sh.name), "PUT", sh);
+        sent++;
+      }
+    }
+    if (sent) return syncPull(false);
+  }
+  ships = (got.ships || []).filter(x => x && typeof x.name === "string" && x.name);
+  saveShips();
+  syncAt = Date.now();
+  syncMsg = "";
+  renderShipSel($("inName").value.trim());
+  return got;
+}
+
+/* Never throws: a sync failure must not take the calculator down with it. */
+async function syncPush(name, method, body) {
+  if (!syncOn()) return;
+  try {
+    await syncCall("/ships/" + encodeURIComponent(name), method, body);
+    syncAt = Date.now();
+    syncMsg = "";
+  } catch (e) {
+    syncMsg = String(e.message || e);
+  }
+  renderSyncLine();
+}
+
+function renderSyncLine() {
+  const el = $("syncLine"), cnt = $("syncCount");
+  if (cnt) cnt.textContent = syncOn() ? "on" : "off";
+  if (!el) return;
+  if (!syncOn()) { el.className = "hint"; el.textContent = ""; return; }
+  const since = () => (Date.now() - syncAt) < 60000
+    ? "just now" : fmtRun((Date.now() - syncAt) / 3600000) + " ago";
+  if (syncMsg) {
+    el.className = "hint bad";
+    el.textContent = "Shared list: " + syncMsg + " \u2014 the ships below are this device\u2019s " +
+      "copy" + (syncAt ? ", last agreed " + since() : "") + ".";
+  } else if (syncAt) {
+    el.className = "hint good";
+    el.textContent = "Shared list \u00B7 synced " + since();
+  } else {
+    el.className = "hint";
+    el.textContent = "Shared list \u00B7 connecting\u2026";
+  }
+}
+
 /* ================= wiring ================= */
 loadInputs();
 renderDestSelects();
 renderDestList();
 setTargetMode(targetMode, true);
 loadShips();
+loadSync();
+if (syncOn()) {
+  syncPull(false)
+    .catch(e => { syncMsg = String(e.message || e); })
+    .then(renderSyncLine);
+}
+renderSyncLine();
+
+$("syncNow").addEventListener("click", async () => {
+  syncUrl = $("syncUrl").value.trim();
+  syncKey = $("syncKey").value.trim();
+  if (!/^https?:\/\//i.test(syncUrl)) { flash($("syncNow"), "Needs https://"); return; }
+  if (!syncKey) { flash($("syncNow"), "Key first"); return; }
+  store.set("shipeta.syncUrl", syncUrl);
+  store.set("shipeta.syncKey", syncKey);
+  $("syncEcho").className = "hint";
+  $("syncEcho").textContent = "Connecting\u2026";
+  try {
+    // First connection shares whatever this device already had.
+    const got = await syncPull(true);
+    $("syncEcho").className = "hint good";
+    $("syncEcho").textContent = "Connected \u2014 " + (got.ships || []).length +
+      " ship" + ((got.ships || []).length === 1 ? "" : "s") + " on the shared list.";
+    flash($("syncNow"), "Connected");
+  } catch (e) {
+    syncMsg = String(e.message || e);
+    $("syncEcho").className = "hint bad";
+    $("syncEcho").textContent = "Couldn\u2019t connect: " + syncMsg + ".";
+  }
+  renderSyncLine();
+});
+
+$("syncOff").addEventListener("click", () => {
+  if (!confirm("Stop sharing? The ships stay on this device; the shared list is left alone.")) return;
+  syncUrl = ""; syncKey = "";
+  store.set("shipeta.syncUrl", "");
+  store.set("shipeta.syncKey", "");
+  $("syncUrl").value = ""; $("syncKey").value = "";
+  syncAt = 0; syncMsg = "";
+  $("syncEcho").className = "hint";
+  $("syncEcho").textContent = "Disconnected. This device keeps its own list.";
+  renderSyncLine();
+});
 /* Shows her as the selected ship when the job on screen is one that's saved. */
 renderShipSel($("inName").value.trim());
 
@@ -2449,6 +2604,7 @@ $("shipSave").addEventListener("click", () => {
   saveShips();
   renderShipSel(name);
   flash($("shipSave"), at >= 0 ? "Updated" : "Saved");
+  syncPush(name, "PUT", rec);
 });
 
 $("shipDel").addEventListener("click", () => {
@@ -2458,6 +2614,7 @@ $("shipDel").addEventListener("click", () => {
   ships = ships.filter(s => s.name !== name);
   saveShips();
   renderShipSel("");
+  syncPush(name, "DELETE");
 });
 
 function showPage(page) {
