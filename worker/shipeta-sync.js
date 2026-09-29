@@ -64,6 +64,19 @@ export default {
   async fetch(req, env) {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
 
+    /* Plain text, and deliberately before the key check. Safari on iOS will
+       not render application/json inline - it shows a blank page - so a
+       phone had no way to tell a broken deploy from a working one. This says
+       what is wired up without saying what the key is. */
+    if (new URL(req.url).pathname.replace(/\/+$/, "") === "/health") {
+      return new Response(
+        "shipeta-sync is running\n" +
+        "secret set:  " + (env.SHIPETA_KEY ? "yes" : "NO - add SHIPETA_KEY") + "\n" +
+        "KV bound:    " + (env.SHIPS ? "yes" : "NO - bind the namespace as SHIPS") + "\n",
+        { headers: { "Content-Type": "text/plain; charset=utf-8",
+                     "Cache-Control": "no-store", ...CORS } });
+    }
+
     /* An unset secret must fail shut. Treating "no key configured" as "no key
        required" is how a private list quietly becomes a public one. */
     if (!env.SHIPETA_KEY) return json({ error: "no key configured on the worker" }, 503);
