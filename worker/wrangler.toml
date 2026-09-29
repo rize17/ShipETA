@@ -14,4 +14,4 @@ compatibility_date = "2026-09-01"
 
 [[kv_namespaces]]
 binding = "SHIPS"
-id = "PUT_THE_KV_NAMESPACE_ID_HERE"
+id = "c6d70e21658b4db28f72d2bd56fb8dc1"
