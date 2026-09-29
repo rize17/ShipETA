@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.14</title>
+<title>Ship ETA v4.15</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -525,7 +525,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.14</span></h1>
+  <h1>Ship ETA<span class="version">v4.15</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -2497,9 +2497,21 @@ async function syncPush(name, method, body) {
   renderSyncLine();
 }
 
+/* Connected is a state, not an event. Flashing "Connected" and dropping back
+   to "Connect" read as though it hadn't worked - the button has to sit there
+   saying what it is. */
+function renderSyncBtn() {
+  const b = $("syncNow"), off = $("syncOff");
+  if (!b) return;
+  b.classList.toggle("done", syncOn() && !syncMsg);
+  b.textContent = !syncOn() ? "Connect" : syncMsg ? "Reconnect" : "Connected";
+  if (off) off.style.display = syncOn() ? "" : "none";
+}
+
 function renderSyncLine() {
   const el = $("syncLine"), cnt = $("syncCount");
   if (cnt) cnt.textContent = syncOn() ? "on" : "off";
+  renderSyncBtn();
   if (!el) return;
   if (!syncOn()) { el.className = "hint"; el.textContent = ""; return; }
   const since = () => (Date.now() - syncAt) < 60000
@@ -2540,13 +2552,14 @@ $("syncNow").addEventListener("click", async () => {
   store.set("shipeta.syncKey", syncKey);
   $("syncEcho").className = "hint";
   $("syncEcho").textContent = "Connecting\u2026";
+  $("syncNow").textContent = "Connecting\u2026";
+  $("syncNow").classList.remove("done");
   try {
     // First connection shares whatever this device already had.
     const got = await syncPull(true);
     $("syncEcho").className = "hint good";
     $("syncEcho").textContent = "Connected \u2014 " + (got.ships || []).length +
       " ship" + ((got.ships || []).length === 1 ? "" : "s") + " on the shared list.";
-    flash($("syncNow"), "Connected");
   } catch (e) {
     syncMsg = String(e.message || e);
     $("syncEcho").className = "hint bad";

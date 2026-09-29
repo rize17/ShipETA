@@ -85,6 +85,13 @@ package manager.
   to the RV; the port select is hidden but its value is kept, so switching
   back costs nothing.
 
+- **Connected is a state, not an event.** The Connect button holds it:
+  *Connect* → *Connected* (green, and it stays green) → *Reconnect* when a
+  call has failed. Flashing “Connected” and dropping back to “Connect” read
+  as though it hadn't worked, leaving a small “(on)” in the fold heading as
+  the only lasting sign. `flash()` is for things that happen — a save, a
+  copy — never for something the app continues to be.
+
 - **The shared list is optional and never load-bearing.** With no worker
   address set the app is exactly what it was — ships on this device, no
   network. With one set, the ship list lives in a Cloudflare worker behind a
