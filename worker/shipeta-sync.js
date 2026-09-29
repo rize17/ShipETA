@@ -20,6 +20,25 @@
  */
 
 const STORE = "ships:v1";
+const KEYKEY = "auth:key";
+
+/* The shared secret, preferring a real runtime secret and falling back to a
+   value in KV.
+   
+   The fallback exists because this worker was first deployed, by accident, as
+   a static-assets site, and Cloudflare went on refusing runtime variables
+   afterwards - "Variables cannot be added to a Worker that only has static
+   assets" - even once the script was running. KV bindings still worked,
+   because those come from wrangler.toml, but a secret can never come from
+   the repo. So the key goes in KV, written by hand in the dashboard.
+   
+   Kept in that order so that if the runtime secret ever becomes settable, it
+   simply takes over and this fallback goes quiet. */
+async function sharedKey(env) {
+  if (env.SHIPETA_KEY) return { key: env.SHIPETA_KEY, from: "runtime secret" };
+  const k = await env.SHIPS.get(KEYKEY);
+  return k ? { key: k, from: "KV" } : { key: null, from: null };
+}
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -69,20 +88,24 @@ export default {
        phone had no way to tell a broken deploy from a working one. This says
        what is wired up without saying what the key is. */
     if (new URL(req.url).pathname.replace(/\/+$/, "") === "/health") {
+      const kv = !!env.SHIPS;
+      const sk = kv ? await sharedKey(env) : { key: null, from: null };
       return new Response(
         "shipeta-sync is running\n" +
-        "secret set:  " + (env.SHIPETA_KEY ? "yes" : "NO - add SHIPETA_KEY") + "\n" +
-        "KV bound:    " + (env.SHIPS ? "yes" : "NO - bind the namespace as SHIPS") + "\n",
+        "KV bound:    " + (kv ? "yes" : "NO - bind the namespace as SHIPS") + "\n" +
+        "secret set:  " + (sk.key ? "yes, from " + sk.from
+                                  : "NO - put the key in KV under " + KEYKEY) + "\n",
         { headers: { "Content-Type": "text/plain; charset=utf-8",
                      "Cache-Control": "no-store", ...CORS } });
     }
 
     /* An unset secret must fail shut. Treating "no key configured" as "no key
        required" is how a private list quietly becomes a public one. */
-    if (!env.SHIPETA_KEY) return json({ error: "no key configured on the worker" }, 503);
     if (!env.SHIPS) return json({ error: "no KV namespace bound as SHIPS" }, 503);
+    const sk = await sharedKey(env);
+    if (!sk.key) return json({ error: "no key configured on the worker" }, 503);
 
-    if (!sameKey(req.headers.get("X-API-Key") || "", env.SHIPETA_KEY))
+    if (!sameKey(req.headers.get("X-API-Key") || "", sk.key))
       return json({ error: "bad or missing key" }, 401);
 
     const path = new URL(req.url).pathname.replace(/\/+$/, "");
