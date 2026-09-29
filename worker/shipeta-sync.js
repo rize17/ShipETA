@@ -91,11 +91,24 @@ export default {
     if (new URL(req.url).pathname.replace(/\/+$/, "") === "/health") {
       const kv = !!env.SHIPS;
       const sk = kv ? await sharedKey(env) : { key: null, from: null };
+      /* The count, because a worker cannot report which namespace it is bound
+         to and the dashboard has more than one answer. Hold this against the
+         KV count in the dashboard: if they disagree, the binding points at a
+         namespace other than the one being looked at. A bare number gives
+         nothing away - no names, no positions. */
+      let stored = "?";
+      if (kv) {
+        try {
+          const cur = await load(env);
+          stored = String((cur.ships || []).length);
+        } catch (_) { stored = "unreadable"; }
+      }
       return new Response(
         "shipeta-sync is running\n" +
         "KV bound:    " + (kv ? "yes" : "NO - bind the namespace as SHIPS") + "\n" +
         "secret set:  " + (sk.key ? "yes, from " + sk.from
-                                  : "NO - put the key in KV under " + KEYKEY) + "\n",
+                                  : "NO - put the key in KV under " + KEYKEY) + "\n" +
+        "ships held:  " + stored + "\n",
         { headers: { "Content-Type": "text/plain; charset=utf-8",
                      "Cache-Control": "no-store", ...CORS } });
     }
