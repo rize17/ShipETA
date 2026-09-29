@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.15</title>
+<title>Ship ETA v4.16</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -525,7 +525,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.15</span></h1>
+  <h1>Ship ETA<span class="version">v4.16</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -750,12 +750,9 @@
 
   <details class="fold" id="syncFold">
     <summary><h2>Shared list<span class="count" id="syncCount"></span></h2></summary>
-    <div class="hint">Point every phone at the same worker and the ship list is shared, so
-      nobody re-enters a vessel someone has already set up. Leave it empty and the app
-      stays exactly as it was, with the list kept on this device only.</div>
-    <label for="syncUrl">Worker address</label>
-    <input id="syncUrl" spellcheck="false" autocapitalize="off" autocorrect="off"
-           inputmode="url" placeholder="https://shipeta-sync.example.workers.dev">
+    <div class="hint">Type the shared key and the ship list is the same on every phone, so
+      nobody re-enters a vessel someone has already set up. Leave it empty and the app stays
+      exactly as it was, with the list kept on this device only.</div>
     <label for="syncKey">Shared key</label>
     <input id="syncKey" spellcheck="false" autocapitalize="off" autocorrect="off"
            placeholder="the key everyone uses">
@@ -2437,13 +2434,23 @@ function applyMT() {
    working offline - this is a planning tool with a signal - but so that a
    worker hiccup shows the list from ten minutes ago with its age on it,
    rather than an empty screen while someone is deciding whether to launch. */
-let syncUrl = "", syncKey = "";
+/* The worker's address is not a secret - it is a public URL, and anyone
+   with the app can see it in the page source either way - so it lives here
+   rather than being typed in by everyone. The KEY is a different matter and
+   is never hardcoded: it is the only thing standing between this list and
+   anyone on the internet writing to it.
+
+   A stored address still wins if there is one, so the worker can be moved
+   without waiting on an app deploy. Nothing offers to set it; it is for
+   tests and for an emergency. */
+const SYNC_URL = "https://shipeta-sync.ryantholliday.workers.dev";
+
+let syncUrl = SYNC_URL, syncKey = "";
 let syncAt = 0, syncMsg = "";
 
 function loadSync() {
-  syncUrl = String(store.get("shipeta.syncUrl", "") || "");
+  syncUrl = String(store.get("shipeta.syncUrl", "") || "") || SYNC_URL;
   syncKey = String(store.get("shipeta.syncKey", "") || "");
-  $("syncUrl").value = syncUrl;
   $("syncKey").value = syncKey;
 }
 const syncOn = () => !!(syncUrl && syncKey);
@@ -2544,11 +2551,9 @@ if (syncOn()) {
 renderSyncLine();
 
 $("syncNow").addEventListener("click", async () => {
-  syncUrl = $("syncUrl").value.trim();
+  syncUrl = String(store.get("shipeta.syncUrl", "") || "") || SYNC_URL;
   syncKey = $("syncKey").value.trim();
-  if (!/^https?:\/\//i.test(syncUrl)) { flash($("syncNow"), "Needs https://"); return; }
-  if (!syncKey) { flash($("syncNow"), "Key first"); return; }
-  store.set("shipeta.syncUrl", syncUrl);
+  if (!syncKey) { flash($("syncNow"), "Key first"); $("syncKey").focus(); return; }
   store.set("shipeta.syncKey", syncKey);
   $("syncEcho").className = "hint";
   $("syncEcho").textContent = "Connecting\u2026";
@@ -2570,10 +2575,9 @@ $("syncNow").addEventListener("click", async () => {
 
 $("syncOff").addEventListener("click", () => {
   if (!confirm("Stop sharing? The ships stay on this device; the shared list is left alone.")) return;
-  syncUrl = ""; syncKey = "";
-  store.set("shipeta.syncUrl", "");
+  syncKey = "";
   store.set("shipeta.syncKey", "");
-  $("syncUrl").value = ""; $("syncKey").value = "";
+  $("syncKey").value = "";
   syncAt = 0; syncMsg = "";
   $("syncEcho").className = "hint";
   $("syncEcho").textContent = "Disconnected. This device keeps its own list.";

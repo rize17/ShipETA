@@ -85,6 +85,14 @@ package manager.
   to the RV; the port select is hidden but its value is kept, so switching
   back costs nothing.
 
+- **The worker's address is in the code; the key never is.** `SYNC_URL` is a
+  public URL, visible in the page source whatever we do, so hardcoding it
+  saves everyone typing it and saves a colleague mistyping it. The shared key
+  is the only thing stopping anyone on the internet writing to the list, so
+  it stays typed and stays out of the repo. A stored `shipeta.syncUrl` still
+  wins if present — no UI sets it; it exists so the worker can move without
+  an app deploy, and so tests can point at a stand-in.
+
 - **Connected is a state, not an event.** The Connect button holds it:
   *Connect* → *Connected* (green, and it stays green) → *Reconnect* when a
   call has failed. Flashing “Connected” and dropping back to “Connect” read
