@@ -113,6 +113,29 @@ package manager.
   hours ago therefore cannot revert anyone else's work, because there is no
   request it could send that would.
 
+- **The worker's key is a runtime secret, with a KV fallback behind it.**
+  `sharedKey()` prefers `env.SHIPETA_KEY` and falls back to `auth:key` in KV.
+  The fallback exists because the worker was once deployed by accident as a
+  static-assets site, after which Cloudflare refused runtime variables on it
+  — KV bindings still worked, since those come from `wrangler.toml`, but a
+  secret can never come from the repo. That restriction has since cleared
+  and the key is a proper secret again. Leave the fallback in: it costs one
+  KV read only when the secret is missing, and it is the way back in if that
+  ever happens a second time.
+
+- **The shared list is optional and never load-bearing.** With no worker
+  address set the app is exactly what it was — ships on this device, no
+  network. With one set, the ship list lives in a Cloudflare worker behind a
+  shared key (see `worker/`). `syncPush` never throws: a sync failure must
+  not take the calculator down, so a save always lands locally first and the
+  line on Calculate says the shared copy didn't. Connecting sends up ships
+  this device has that the list hasn't, and deletes nothing.
+
+- **The worker has no endpoint that writes the whole list.** Every write
+  names one ship and the worker merges it. A client holding a list from
+  hours ago therefore cannot revert anyone else's work, because there is no
+  request it could send that would.
+
 - **The worker reads its key from KV, not from a runtime secret.** It was
   first deployed by accident as a static-assets site, and Cloudflare then
   refused runtime variables on it ever after. KV bindings still work, since

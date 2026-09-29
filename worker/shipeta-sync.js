@@ -25,15 +25,16 @@ const KEYKEY = "auth:key";
 /* The shared secret, preferring a real runtime secret and falling back to a
    value in KV.
    
-   The fallback exists because this worker was first deployed, by accident, as
-   a static-assets site, and Cloudflare went on refusing runtime variables
-   afterwards - "Variables cannot be added to a Worker that only has static
-   assets" - even once the script was running. KV bindings still worked,
-   because those come from wrangler.toml, but a secret can never come from
-   the repo. So the key goes in KV, written by hand in the dashboard.
+   The fallback earned its place: this worker was first deployed, by accident,
+   as a static-assets site, and Cloudflare then refused runtime variables on
+   it - "Variables cannot be added to a Worker that only has static assets" -
+   even once the script was running. KV bindings still worked, because those
+   come from wrangler.toml, but a secret can never come from the repo, so the
+   key went into KV by hand.
    
-   Kept in that order so that if the runtime secret ever becomes settable, it
-   simply takes over and this fallback goes quiet. */
+   That restriction has since cleared and the key is a proper secret again.
+   The fallback stays: it costs a KV read only when the secret is missing,
+   and it is the way back in if this ever happens a second time. */
 async function sharedKey(env) {
   if (env.SHIPETA_KEY) return { key: env.SHIPETA_KEY, from: "runtime secret" };
   const k = await env.SHIPS.get(KEYKEY);
