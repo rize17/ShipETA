@@ -122,6 +122,13 @@ package manager.
   comparison has to stay: a stale position that looks fresh is the worst
   thing this app can show.
 
+- **Saving clears `jobDirty` and `syncFresh` together.** After a save the job
+  on screen is the ship record rather than an edit of one, and it is also
+  what the shared list now holds — so both the dirty flag and the “changed
+  elsewhere” notice have to go at the same moment. Clearing only one left
+  “she has changed on the shared list” sitting there after the change was
+  yours and already sent.
+
 - **`jobDirty` is what stops a sync eating someone's typing.** Every route
   that changes the job goes through `saveInputs()`, so the flag is set there
   and cleared only in `applyShip()`, where the job on screen *is* a ship

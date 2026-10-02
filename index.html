@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.19</title>
+<title>Ship ETA v4.20</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -525,7 +525,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.19</span></h1>
+  <h1>Ship ETA<span class="version">v4.20</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -2734,6 +2734,12 @@ $("shipSave").addEventListener("click", () => {
   saveShips();
   renderShipSel(name);
   flash($("shipSave"), at >= 0 ? "Updated" : "Saved");
+  /* Saving settles both questions at once: the job on screen is now the ship
+     record, not an edit of one, and it is also what the shared list is about
+     to hold. Leaving either flag set left "she has changed on the shared
+     list" on screen after the change was mine and already sent. */
+  jobDirty = false;
+  syncFresh = "";
   syncPush(name, "PUT", rec);
 });
 
