@@ -35,6 +35,20 @@ package manager.
   no symbols, either order. It's typed by hand off a screen under time
   pressure — every format it rejects is a format someone has to retype.
   Anything it can't read says so plainly rather than guessing.
+- **A hint has to earn its line.** Calculate carried a paragraph under most
+  fields and nobody read any of it, so the ones explaining what a Save button
+  does are gone. What stays is what a label can't say: that any coordinate
+  format is accepted, that the course changes no figure, that an RV replaces
+  the port. Echoes are not hints — the three-format position, the age line,
+  the sync line are computed from what's actually there and must not be cut
+  for tidiness.
+
+- **Never put a worked example in static text.** The course hint read
+  “MarineTraffic gives both together, as 12.8kn / 288°”, which stayed 12.8
+  and 288 whatever the ship was doing — a hardcoded number sitting beside a
+  live one, inviting the reader to take it for theirs. Either derive it or
+  leave it out.
+
 - **Echo back what was parsed, in every format.** Under the input the position
   is shown again as degrees and decimal minutes, degrees minutes seconds, and
   decimal degrees, each tagged. A transposed digit is the likeliest error in

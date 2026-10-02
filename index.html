@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.17</title>
+<title>Ship ETA v4.18</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -525,7 +525,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.17</span></h1>
+  <h1>Ship ETA<span class="version">v4.18</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -551,28 +551,22 @@
   <section class="panel">
     <h2>The job</h2>
 
-    <label for="shipSel">Saved ship</label>
+    <label for="shipSel">Vessel</label>
     <div class="taken-row">
       <select id="shipSel"></select>
       <button id="shipSave" type="button">Save</button>
       <button id="shipDel" type="button">Delete</button>
     </div>
+    <input id="inName" placeholder="name or call sign" spellcheck="false"
+           style="margin-top:8px">
     <div class="hint" id="syncLine"></div>
-    <div class="hint">Save her once and the whole job comes back next time — position,
-      speed, course, destination and any turning points — so only what’s changed needs
-      retyping. Saving again under the same name updates her.</div>
-
-    <label for="inName">Vessel (optional)</label>
-    <input id="inName" placeholder="name or call sign" spellcheck="false">
-    <div class="hint">Shown on the map, so a screenshot says which ship it is.</div>
 
     <button class="ghost" id="mtBtn" type="button">Paste from MarineTraffic</button>
 
     <label for="inPos">Ship's position</label>
     <input id="inPos" spellcheck="false" autocapitalize="characters"
            placeholder="33.6833° S, 10.1050° E">
-    <div class="hint" id="posEcho">Type it however MarineTraffic shows it — degrees,
-      degrees and minutes, or minutes and seconds, with or without the symbols.</div>
+    <div class="hint" id="posEcho">Any format MarineTraffic shows.</div>
 
     <div class="grid2">
       <div>
@@ -584,17 +578,15 @@
         <input id="inCourse" inputmode="decimal" placeholder="288">
       </div>
     </div>
-    <div class="hint">MarineTraffic gives both together, as <b>12.8kn / 288°</b>. The
-      course changes no figure here — it draws a dotted line ahead of her on the map and
-      says below whether she’s actually pointed where these times assume.</div>
+    <div class="hint">Course changes no figure — it checks she’s pointed where these
+      times assume.</div>
 
     <label for="inTaken">Taken at <span id="takenZone" class="zone"></span></label>
     <div class="taken-row">
       <input id="inTaken" type="datetime-local">
       <button id="nowBtn" type="button">Now</button>
     </div>
-    <div class="hint" id="ageEcho">When that position was reported. She's carried forward
-      from it at the speed above, so the figures stay right if you come back to this later.</div>
+    <div class="hint" id="ageEcho">When the position was reported.</div>
 
   </section>
 
@@ -620,9 +612,7 @@
       <input id="inRv" spellcheck="false" autocapitalize="characters"
              placeholder="34° 10.000′ S, 017° 30.000′ E">
       <div class="hint" id="rvEcho"></div>
-      <div class="hint">Where she's coming out to meet us, typed the same way as her own
-        position. Her track, her ETA and every ring crossing run to here instead of the
-        port. Saved with the ship, so each one keeps her own.</div>
+      <div class="hint">Her track and every ring crossing run here instead of the port.</div>
     </div>
   </details>
 
@@ -635,15 +625,12 @@
   <details class="panel" style="margin-top:12px">
     <summary>What this assumes</summary>
     <div class="hint">
-      Distances are great-circle (shortest path over the earth) in nautical miles, which is
-      what a tape measure in Google Earth gives you.<br><br>
-      Every ETA assumes the ship holds the speed you entered and steams straight at the
-      destination. It doesn't know about traffic separation schemes, weather routing, or the
-      ship slowing down — so treat it the way you'd treat MarineTraffic's own ETA, and redo it
-      when you get a fresh position. If she plainly isn't heading for the port, none of this
-      applies and the chart and a ruler are still the answer.<br><br>
-      A range ring is measured from the destination, not from wherever you're flying out of,
-      unless you pick the same place for both.
+      Distances are great-circle in nautical miles — what a tape measure in Google Earth
+      gives you.<br><br>
+      Every ETA assumes she holds the speed entered and steams the track shown. Nothing
+      here knows about weather, traffic separation or her slowing down, so treat it as you
+      would MarineTraffic’s own ETA and redo it on a fresh position.<br><br>
+      Range rings are measured from each airfield, not from the port.
     </div>
   </details>
 </main>
@@ -1413,8 +1400,7 @@ function renderResults() {
   const posEcho = $("posEcho");
   if (!$("inPos").value.trim()) {
     posEcho.className = "hint";
-    posEcho.textContent = "Type it however MarineTraffic shows it — degrees, degrees and " +
-      "minutes, or minutes and seconds, with or without the symbols.";
+    posEcho.textContent = "Any format MarineTraffic shows.";
     $("inPos").classList.remove("bad");
   } else if (!ship) {
     posEcho.className = "hint bad";
@@ -1469,8 +1455,7 @@ function renderResults() {
       "and she'll be carried forward from it.";
   } else {
     ageEcho.className = "hint";
-    ageEcho.textContent = "When that position was reported. She's carried forward from it at " +
-      "the speed above, so the figures stay right if you come back to this later.";
+    ageEcho.textContent = "When the position was reported.";
   }
 
   const html = [];
@@ -2244,7 +2229,7 @@ function renderShipSel(keepName) {
   sel.innerHTML = "";
   const none = document.createElement("option");
   none.value = "";
-  none.textContent = ships.length ? "\u2014 not a saved ship \u2014" : "\u2014 none saved yet \u2014";
+  none.textContent = "\u2014 new vessel \u2014";
   sel.appendChild(none);
   ships.forEach(s => {
     const o = document.createElement("option");
@@ -2653,6 +2638,7 @@ $("mtDlg").addEventListener("close", () => { document.body.style.overflow = ""; 
 $("shipSel").addEventListener("change", () => {
   const s = ships.find(x => x.name === $("shipSel").value);
   if (s) applyShip(s);
+  else { $("inName").value = ""; saveInputs(); render(); $("inName").focus(); }
   $("shipDel").disabled = !$("shipSel").value;
 });
 
