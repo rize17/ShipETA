@@ -35,6 +35,21 @@ package manager.
   no symbols, either order. It's typed by hand off a screen under time
   pressure — every format it rejects is a format someone has to retype.
   Anything it can't read says so plainly rather than guessing.
+- **One control per idea.** The vessel is the picker, and nothing else. A
+  select plus a name box was two controls for one thing, with her name in two
+  places at once; naming a new one is a dialog. `#inName` is still the field
+  everything reads and writes, just hidden — a vessel named but not yet
+  saved is shown in the picker as “· unsaved”, because her name is already on
+  the map and in the brief by then.
+
+- **The end of the track is a meeting place too.** The rings answer “where
+  could we meet her on the way”, but plenty of jobs are simply “meet her at
+  the RV”, or alongside, whenever that is. It is listed with the ring
+  crossings and carries the same figures — when she's there, and the latest
+  each airfield can lift — since otherwise it can't be compared against
+  them. Shown even when nothing is in range, flagged against the largest
+  ring, because that is exactly the job where the operator is weighing it up.
+
 - **A hint has to earn its line.** Calculate carried a paragraph under most
   fields and nobody read any of it, so the ones explaining what a Save button
   does are gone. What stays is what a label can't say: that any coordinate

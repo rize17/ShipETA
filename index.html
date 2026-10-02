@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.18</title>
+<title>Ship ETA v4.19</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -525,7 +525,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.18</span></h1>
+  <h1>Ship ETA<span class="version">v4.19</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -557,8 +557,7 @@
       <button id="shipSave" type="button">Save</button>
       <button id="shipDel" type="button">Delete</button>
     </div>
-    <input id="inName" placeholder="name or call sign" spellcheck="false"
-           style="margin-top:8px">
+    <input id="inName" type="hidden">
     <div class="hint" id="syncLine"></div>
 
     <button class="ghost" id="mtBtn" type="button">Paste from MarineTraffic</button>
@@ -578,8 +577,8 @@
         <input id="inCourse" inputmode="decimal" placeholder="288">
       </div>
     </div>
-    <div class="hint">Course changes no figure — it checks she’s pointed where these
-      times assume.</div>
+    <div class="hint">Dotted line on the map comparing her actual heading with this
+      track. Changes no figure.</div>
 
     <label for="inTaken">Taken at <span id="takenZone" class="zone"></span></label>
     <div class="taken-row">
@@ -654,6 +653,21 @@
 </main>
 
 <!-- ======================= PLACES (settings) ======================= -->
+<dialog id="nameDlg">
+  <div class="dlg-head">
+    <h2>New vessel</h2>
+    <button class="copy-chip" id="nameClose" type="button">Close</button>
+  </div>
+  <label for="newName">Vessel name</label>
+  <input id="newName" placeholder="vessel name" spellcheck="false">
+  <div class="hint">What she’s saved and listed under, and what the map says on a
+    screenshot.</div>
+  <div class="grid2" style="margin-top:14px">
+    <button class="primary" id="nameOk" type="button">Add</button>
+    <button class="ghost" id="nameCancel" type="button" style="margin-top:0">Cancel</button>
+  </div>
+</dialog>
+
 <dialog id="mtDlg">
   <div class="dlg-head">
     <h2>Paste from MarineTraffic</h2>
@@ -1360,17 +1374,36 @@ function compute() {
       ? "That RV position can\u2019t be read, so she\u2019s still being taken to " + dest.name + "."
       : "No RV position yet, so she\u2019s still being taken to " + dest.name + "."]);
 
+  /* The rings answer "where could we meet her on the way", but a job is often
+     simply "meet her at the RV", or alongside, whenever that is. That meeting
+     place is the end of the track, and it needs the same figures as a ring
+     crossing - when she's there, and the latest each airfield can lift to be
+     there too - or it can't be compared against them. */
+  const endH = speed > 0 ? hrs(trackLen) : null;
+  const biggest = ringList.length ? Math.max.apply(null, ringList) : 0;
+  const endFields = places.filter(isField).map(pl => {
+    const nm = distanceNm(pl, target);
+    const flyH = aSpeed > 0 ? nm / aSpeed : null;
+    return {
+      place: pl, code: icaoOf(pl), nm, flyH,
+      liftH: (endH != null && flyH != null) ? endH - flyH : null,
+      inRange: biggest > 0 && nm <= biggest
+    };
+  }).sort((a, b) => a.nm - b.nm);
+
   const fieldsShown = fields.filter(f => f.shown);
   const inRangeShown = inRange.filter(f => f.shown);
 
   model = { name, dest, reported, now, moved, age, dist, distAtReport, brg, speed, aSpeed, course,
-            rv: rvPos, endName, headingFor,
+            rv: rvPos, endName, headingFor, endH, endFields,
             notes, t0, transiting, target, trackBrg, trackLen, arrival, fromNow,
             vertices, segs, runS, total,
             fields, inRange, outOfRange, ringList, fieldsShown, inRangeShown };
 }
 
 const pad3 = v => String(Math.round(v) % 360).padStart(3, "0");
+const biggestRing = () => (model && model.ringList.length)
+  ? Math.max.apply(null, model.ringList) : 0;
 /* Separation between two bearings the short way round, so 350 and 010 are
    20 apart rather than 340. */
 const offBy = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
@@ -1537,6 +1570,31 @@ function renderResults() {
       " \u00B7 " + f.distNow.toFixed(0) + " nm off her now</div>");
     html.push("</div>");
   });
+
+  /* Last, because the rings are usually the answer - but present, because
+     sometimes the answer is simply "we meet her there". */
+  html.push('<div class="leg" style="margin-top:4px">');
+  html.push('<div class="name"><b>' + esc(model.endName) + "</b> \u2014 " +
+    (model.transiting ? "end of her track" : "alongside") + "</div>");
+  html.push('<div class="ringrow">');
+  html.push('<span class="rr-ring">there</span>');
+  html.push('<span class="rr-eta">' + (model.endH == null ? "\u2014"
+    : fmtClock(at(model.endH), true)) + "</span>");
+  html.push('<span class="rr-run">' + (model.endH == null ? "" : fmtRun(model.endH)) + "</span>");
+  html.push('<span class="rr-dist">' + model.trackLen.toFixed(1) + " nm to run</span>");
+  html.push("</div>");
+  const reach = model.endFields.filter(f => f.inRange);
+  (reach.length ? reach : model.endFields.slice(0, 3)).forEach(f => {
+    html.push('<div class="rr-sub' + (f.inRange ? "" : " warn") + '">' + esc(f.code) +
+      " \u00B7 " + f.nm.toFixed(0) + " nm out" +
+      (f.flyH == null ? "" : " \u00B7 " + fmtRun(f.flyH) + " flying") +
+      (f.liftH == null ? ""
+        : " \u00B7 " + (f.liftH < 0 ? "too late by " + fmtRun(-f.liftH)
+                                     : "lift by <b>" + fmtClock(at(f.liftH), true) + "</b>")) +
+      (f.inRange ? "" : " \u2014 beyond " + biggestRing() + " nm") + "</div>");
+  });
+  html.push(posLine({ at: model.target }));
+  html.push("</div>");
 
   if (model.outOfRange.length) {
     html.push('<div class="hint" style="margin-top:12px">Never in range on this track: ' +
@@ -2236,18 +2294,21 @@ function renderShipSel(keepName) {
     o.value = s.name; o.textContent = s.name;
     sel.appendChild(o);
   });
-  sel.value = ships.some(s => s.name === want) ? want : "";
-  $("shipDel").disabled = !sel.value;
+  /* A vessel named but not yet saved still has to appear, or the picker would
+     say "new vessel" while her name is on the map and in the brief. */
+  const live = $("inName").value.trim();
+  if (live && !ships.some(s => s.name.toLowerCase() === live.toLowerCase())) {
+    const o = document.createElement("option");
+    o.value = live; o.textContent = live + " \u00B7 unsaved";
+    sel.appendChild(o);
+  }
+  sel.value = ships.some(s => s.name === want) ? want : (live || "");
+  $("shipDel").disabled = !ships.some(s => s.name === sel.value);
 }
 
 /* Keeps the picker honest about what's on screen: type over the name and she
    is no longer the saved ship, so Delete stops offering to remove her. */
-function syncShipSel() {
-  const sel = $("shipSel");
-  const name = $("inName").value.trim();
-  sel.value = ships.some(s => s.name === name) ? name : "";
-  $("shipDel").disabled = !sel.value;
-}
+function syncShipSel() { renderShipSel($("inName").value.trim()); }
 
 /* Silent, when called while loading a ship or booting - the caller renders. */
 function setTargetMode(mode, quiet) {
@@ -2637,9 +2698,30 @@ $("mtDlg").addEventListener("close", () => { document.body.style.overflow = ""; 
 
 $("shipSel").addEventListener("change", () => {
   const s = ships.find(x => x.name === $("shipSel").value);
-  if (s) applyShip(s);
-  else { $("inName").value = ""; saveInputs(); render(); $("inName").focus(); }
-  $("shipDel").disabled = !$("shipSel").value;
+  if (s) { applyShip(s); renderShipSel(s.name); return; }
+  if (!$("shipSel").value) {
+    $("newName").value = "";
+    $("nameDlg").showModal();
+    document.body.style.overflow = "hidden";
+    $("newName").focus();
+  }
+});
+
+function closeNameDlg() { $("nameDlg").close(); document.body.style.overflow = ""; }
+$("nameOk").addEventListener("click", () => {
+  const n = $("newName").value.trim();
+  if (!n) { $("newName").focus(); return; }
+  $("inName").value = n;
+  saveInputs();
+  renderShipSel(n);
+  render();
+  closeNameDlg();
+});
+$("nameCancel").addEventListener("click", () => { renderShipSel(); closeNameDlg(); });
+$("nameClose").addEventListener("click", () => { renderShipSel(); closeNameDlg(); });
+$("newName").addEventListener("keydown", e => { if (e.key === "Enter") $("nameOk").click(); });
+$("nameDlg").addEventListener("click", e => {
+  if (e.target === $("nameDlg")) { renderShipSel(); closeNameDlg(); }
 });
 
 $("shipSave").addEventListener("click", () => {
