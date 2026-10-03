@@ -157,6 +157,15 @@ package manager.
   wins if present — no UI sets it; it exists so the worker can move without
   an app deploy, and so tests can point at a stand-in.
 
+- **The Offshore Tools keys work here too.** The worker also accepts the
+  optional secrets `OFFSHORE_VIEW_KEY` and `OFFSHORE_ADMIN_KEY` (same values
+  as the offshoretools-api worker's keys), each exactly like `SHIPETA_KEY`.
+  Offshore Tools is on the same origin (`rize17.github.io`), so a device with
+  no shared key reads `offshoretools.key` from localStorage and connects with
+  it (`adoptShared()`), the same as pressing Connect. *Disconnect* sets
+  `shipeta.syncOptOut` and that stops it; *Connect* clears it. Never adopt
+  over an opt-out: that would undo someone's choice to keep their own list.
+
 - **Connected is a state, not an event.** The Connect button holds it:
   *Connect* → *Connected* (green, and it stays green) → *Reconnect* when a
   call has failed. Flashing “Connected” and dropping back to “Connect” read

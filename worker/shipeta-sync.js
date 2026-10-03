@@ -11,6 +11,11 @@
  *   SHIPS        KV namespace
  *   SHIPETA_KEY  secret
  *
+ * Optional: OFFSHORE_VIEW_KEY and OFFSHORE_ADMIN_KEY, the Offshore Tools
+ * keys (same values as on the offshoretools-api worker). Either one works
+ * here exactly like SHIPETA_KEY, so one key opens every tool. Ship ETA has
+ * no read-only level, so both get full use of the list.
+ *
  * Note there is deliberately NO endpoint that replaces the whole list. Every
  * write names one ship, and the Worker merges it into the stored list itself.
  * A client that PUT the entire list would silently revert every other ship to
@@ -108,6 +113,8 @@ export default {
         "KV bound:    " + (kv ? "yes" : "NO - bind the namespace as SHIPS") + "\n" +
         "secret set:  " + (sk.key ? "yes, from " + sk.from
                                   : "NO - put the key in KV under " + KEYKEY) + "\n" +
+        "offshore:    " + (env.OFFSHORE_VIEW_KEY ? "view key set" : "view key not set") + ", " +
+                          (env.OFFSHORE_ADMIN_KEY ? "admin key set" : "admin key not set") + " (optional)\n" +
         "ships held:  " + stored + "\n",
         { headers: { "Content-Type": "text/plain; charset=utf-8",
                      "Cache-Control": "no-store", ...CORS } });
@@ -119,7 +126,8 @@ export default {
     const sk = await sharedKey(env);
     if (!sk.key) return json({ error: "no key configured on the worker" }, 503);
 
-    if (!sameKey(req.headers.get("X-API-Key") || "", sk.key))
+    const given = req.headers.get("X-API-Key") || "";
+    if (![sk.key, env.OFFSHORE_VIEW_KEY, env.OFFSHORE_ADMIN_KEY].some(k => k && sameKey(given, k)))
       return json({ error: "bad or missing key" }, 401);
 
     const path = new URL(req.url).pathname.replace(/\/+$/, "");

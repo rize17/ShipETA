@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.21</title>
+<title>Ship ETA v4.22</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -528,7 +528,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.21</span></h1>
+  <h1>Ship ETA<span class="version">v4.22</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -756,7 +756,8 @@
     <summary><h2>Shared list<span class="count" id="syncCount"></span></h2></summary>
     <div class="hint">Type the shared key and the ship list is the same on every phone, so
       nobody re-enters a vessel someone has already set up. Leave it empty and the app stays
-      exactly as it was, with the list kept on this device only.</div>
+      exactly as it was, with the list kept on this device only. If Offshore Tools is
+      unlocked on this phone, its key is used here automatically.</div>
     <label for="syncKey">Shared key</label>
     <input id="syncKey" spellcheck="false" autocapitalize="off" autocorrect="off"
            placeholder="the key everyone uses">
@@ -2649,7 +2650,29 @@ function syncRefresh() {
     .catch(e => { syncMsg = String(e.message || e); })
     .then(renderSyncLine);
 }
-syncRefresh();
+
+/* Offshore Tools (rize17.github.io/OffShoreTools) is on the same origin, so
+   its saved key is readable here, and the worker accepts it. A device with
+   no shared key of its own takes that one and connects - exactly what
+   pressing Connect does, ships on this device included. Someone who pressed
+   Disconnect has said they want this device's own list, so it is never
+   done for them again until they press Connect. */
+async function adoptShared() {
+  if (syncKey || store.get("shipeta.syncOptOut", false)) return;
+  const shared = String(store.get("offshoretools.key", "") || "").trim();
+  if (!shared) return;
+  syncKey = shared;
+  try {
+    await syncPull(true);
+    store.set("shipeta.syncKey", syncKey);
+    $("syncKey").value = syncKey;
+  } catch (_) {
+    // Not accepted, or no signal: stay on this device's list; try next load.
+    syncKey = ""; syncAt = 0; syncMsg = "";
+  }
+  renderSyncLine();
+}
+if (syncKey) syncRefresh(); else adoptShared();
 renderSyncLine();
 
 /* A minute is far quicker than positions actually change, and 1440 reads a
@@ -2664,6 +2687,7 @@ $("syncNow").addEventListener("click", async () => {
   syncKey = $("syncKey").value.trim();
   if (!syncKey) { flash($("syncNow"), "Key first"); $("syncKey").focus(); return; }
   store.set("shipeta.syncKey", syncKey);
+  store.set("shipeta.syncOptOut", false);
   $("syncEcho").className = "hint";
   $("syncEcho").textContent = "Connecting\u2026";
   $("syncNow").textContent = "Connecting\u2026";
@@ -2686,6 +2710,7 @@ $("syncOff").addEventListener("click", () => {
   if (!confirm("Stop sharing? The ships stay on this device; the shared list is left alone.")) return;
   syncKey = "";
   store.set("shipeta.syncKey", "");
+  store.set("shipeta.syncOptOut", true);
   $("syncKey").value = "";
   syncAt = 0; syncMsg = "";
   $("syncEcho").className = "hint";
