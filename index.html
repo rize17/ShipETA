@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ship ETA v4.20</title>
+<title>Ship ETA v4.21</title>
 
 <!-- Add-to-Home-Screen support -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -309,7 +309,10 @@
   .leaflet-control-attribution a { color: var(--aqua-deep); }
 
   .map-head { display: flex; gap: 8px; margin-bottom: 10px; }
-  #rvFold > summary .where { color: var(--aqua); font-weight: 600; margin-left: 8px; }
+  details.panel > summary .where {
+    color: var(--aqua); font-weight: 600; margin-left: 8px;
+    letter-spacing: 0.04em; text-transform: none;
+  }
   .map-head button {
     flex: 1; padding: 9px 6px; border-radius: 9px; cursor: pointer;
     background: #081420; border: 1px solid var(--panel-edge); color: var(--ink-dim);
@@ -525,7 +528,7 @@
 <body>
 
 <header>
-  <h1>Ship ETA<span class="version">v4.20</span></h1>
+  <h1>Ship ETA<span class="version">v4.21</span></h1>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="tzBtn" type="button" title="Switch between local time and UTC">
       <b id="tzName">LOCAL</b> <span id="clock" class="mono">--:--</span>
@@ -1408,6 +1411,7 @@ const biggestRing = () => (model && model.ringList.length)
    20 apart rather than 340. */
 const offBy = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
 const at = h => new Date(model.t0 + h * 3600000);
+let rangeOpen = false;      // shut on load, and left alone once opened
 
 /* ================= rendering ================= */
 function render() {
@@ -1525,7 +1529,18 @@ function renderResults() {
 
   /* One card per airfield she comes within range of, soonest first. Nothing is
      chosen for you: the point of the list is that you pick. */
-  html.push('<section class="panel"><h2>Where she comes into range</h2>');
+  /* Shut by default: the answer is usually the one line in the summary, and
+     the full list is a screenful of airfields nobody is reading on most jobs.
+     The open state is kept in a variable because this panel is rebuilt from
+     scratch on every render - including the one-a-minute sync - and a fold
+     that snapped shut under someone every sixty seconds would be worse than
+     no fold at all. */
+  const soonest = model.inRange.length && model.inRange[0].firstHours != null
+    ? model.inRange[0].code + " \u00B7 " + fmtClock(at(model.inRange[0].firstHours), true)
+    : (model.inRange.length ? model.inRange[0].code : "none in range");
+  html.push('<details class="panel" id="rangeFold"' + (rangeOpen ? " open" : "") + ">" +
+    "<summary>Where she comes into range" +
+    '<span class="where">' + esc(soonest) + "</span></summary>");
   if (!model.inRange.length) {
     html.push('<div class="empty">Not inside any airfield\u2019s rings on this track.</div>');
   }
@@ -1601,7 +1616,7 @@ function renderResults() {
       esc(model.outOfRange.map(f => f.code + " " + f.cpa.nm.toFixed(0) + " nm").join(", ")) +
       ".</div>");
   }
-  html.push("</section>");
+  html.push("</details>");
 
   html.push('<section class="panel"><h2>Check</h2>');
   model.notes.forEach(([k, t]) => html.push('<div class="hint ' + k + '">' + esc(t) + "</div>"));
@@ -1630,6 +1645,9 @@ function renderResults() {
   html.push("</section>");
 
   box.innerHTML = html.join("");
+  /* The element is new every render, so the listener goes on with it. */
+  const rf = $("rangeFold");
+  if (rf) rf.addEventListener("toggle", () => { rangeOpen = rf.open; });
 }
 
 function esc(s) {

@@ -42,6 +42,14 @@ package manager.
   saved is shown in the picker as “· unsaved”, because her name is already on
   the map and in the brief by then.
 
+- **A fold rebuilt on every render needs its state held outside it.**
+  “Where she comes into range” is written from scratch each time
+  `renderResults()` runs — including the once-a-minute sync — so `rangeOpen`
+  lives in a variable and the `toggle` listener is attached to the new
+  element each time. Without that, a panel someone had opened would snap shut
+  under them every sixty seconds. `toggle` does not bubble, so it cannot be
+  delegated from `#results`.
+
 - **The end of the track is a meeting place too.** The rings answer “where
   could we meet her on the way”, but plenty of jobs are simply “meet her at
   the RV”, or alongside, whenever that is. It is listed with the ring
